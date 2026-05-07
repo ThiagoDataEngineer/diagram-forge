@@ -1099,6 +1099,89 @@ if (DEV_PAY_ENABLED) {
   });
 }
 
+// ─── GitHub OAuth ────────────────────────────────────────────────────────────
+// GET /auth/github        → redirect to GitHub
+// GET /auth/github/callback → exchange code, return repo list to landing
+
+const GITHUB_CLIENT_ID     = process.env.GITHUB_CLIENT_ID     ?? "";
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
+const GITHUB_REDIRECT_URI  = process.env.GITHUB_REDIRECT_URI  ?? "https://diagram-forge.onrender.com/auth/github/callback";
+
+app.get("/auth/github", (_req, res) => {
+  if (!GITHUB_CLIENT_ID) {
+    res.status(503).json({ error: "GitHub OAuth not configured" });
+    return;
+  }
+  const params = new URLSearchParams({
+    client_id:    GITHUB_CLIENT_ID,
+    redirect_uri: GITHUB_REDIRECT_URI,
+    scope:        "repo",
+    state:        crypto.randomBytes(8).toString("hex"),
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+});
+
+app.get("/auth/github/callback", async (req, res) => {
+  const code  = req.query.code  as string | undefined;
+  const error = req.query.error as string | undefined;
+
+  if (error || !code) {
+    res.redirect(`/?gh_error=${encodeURIComponent(error ?? "cancelled")}`);
+    return;
+  }
+
+  try {
+    // Exchange code for token
+    const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id:     GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri:  GITHUB_REDIRECT_URI,
+      }),
+    });
+    const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+
+    if (!tokenData.access_token) {
+      res.redirect(`/?gh_error=${encodeURIComponent(tokenData.error ?? "token_exchange_failed")}`);
+      return;
+    }
+
+    // Fetch user repos (first 100, sorted by recent push)
+    const reposRes = await fetch(
+      "https://api.github.com/user/repos?sort=pushed&per_page=100&type=owner",
+      { headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "diagram-forge" } }
+    );
+    const repos = await reposRes.json() as Array<{ full_name: string; private: boolean; pushed_at: string }>;
+
+    const list = Array.isArray(repos)
+      ? repos.map(r => ({ full_name: r.full_name, private: r.private, pushed_at: r.pushed_at }))
+      : [];
+
+    // Return a small page that posts repos to the opener and closes itself
+    const safeList = JSON.stringify(list).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html>
+<html>
+<head><title>Connecting…</title></head>
+<body>
+<script>
+try {
+  window.opener.postMessage({ type: 'gh_repos', repos: ${safeList} }, '*');
+} catch(e) {}
+window.close();
+</script>
+<p>Closing…</p>
+</body>
+</html>`);
+  } catch (err) {
+    log.error({ err }, "github oauth error");
+    res.redirect(`/?gh_error=server_error`);
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {

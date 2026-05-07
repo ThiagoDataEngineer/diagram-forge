@@ -193,7 +193,7 @@ app.post(
     next();
   },
   // ── Promo code check — bypasses L402 if valid ───────────────────────────
-  async (req: AuthedRequest, _res, next) => {
+  async (req: AuthedRequest, res, next) => {
     if ((req as AuthedRequest).l402) return next();
     const code = req.body?.promo_code as string | undefined;
     if (code) {
@@ -207,6 +207,10 @@ app.post(
           sats: 0,
         };
         log.info({ code: code.toUpperCase(), tier }, "promo code redeemed");
+      } else {
+        // Return 402 with promo_error so the landing can show a specific message
+        res.status(402).json({ error: "promo_invalid", promo_error: result.reason });
+        return;
       }
     }
     next();

@@ -127,7 +127,7 @@ app.get("/pay", (_req, res) => {
 
 // 4.3: Honest health — reflects real backend state
 app.get("/health", (_req, res) => {
-  const backend = process.env.BLINK_API_KEY ? "blink" : process.env.LNBITS_URL ? "lnbits" : "mock";
+  const backend = process.env.BLINK_API_KEY ? "blink" : process.env.LNBITS_URL ? "lnbits" : process.env.LIGHTNING_ADDRESS ? "managed" : "mock";
   const ok = backend !== "mock" || true; // mock is always "ok" for dev; extend with circuit breaker state later
   res.status(200).json({
     status: ok ? "ok" : "degraded",

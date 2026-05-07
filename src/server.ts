@@ -108,9 +108,10 @@ setInterval(() => {
 
 // ─── 3.1: Zod schema for /analyze request body ───────────────────────────────
 const AnalyzeBodySchema = z.object({
-  repo_url:  z.string().url().max(500).optional(),
-  repo_path: z.string().max(1000).optional(),
-  tier:      z.enum(["basic", "full", "live"]).optional(),
+  repo_url:   z.string().url().max(500).optional(),
+  repo_path:  z.string().max(1000).optional(),
+  tier:       z.enum(["basic", "full", "live"]).optional(),
+  promo_code: z.string().max(64).optional(),
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -191,8 +192,27 @@ app.post(
     }
     next();
   },
+  // ── Promo code check — bypasses L402 if valid ───────────────────────────
+  async (req: AuthedRequest, _res, next) => {
+    if ((req as AuthedRequest).l402) return next();
+    const code = req.body?.promo_code as string | undefined;
+    if (code) {
+      const result = await redeemPromo(code);
+      if (result.valid) {
+        const tier = result.tier ?? (req.body?.tier as "basic" | "full" | "live") ?? "basic";
+        (req as AuthedRequest).l402 = {
+          payment_hash: `promo_${code.toUpperCase()}_${Date.now()}`,
+          expires_at: Math.floor(Date.now() / 1000) + 7200,
+          tier,
+          sats: 0,
+        };
+        log.info({ code: code.toUpperCase(), tier }, "promo code redeemed");
+      }
+    }
+    next();
+  },
   (req: AuthedRequest, res, next) => {
-    // If already authenticated via Stripe, skip L402 gate
+    // If already authenticated via Stripe or promo, skip L402 gate
     if ((req as AuthedRequest).l402) return next();
     const tier = (req.body?.tier as "basic" | "full" | "live") ?? "full";
     if (isProductionLightning() || process.env.LIGHTNING_ADDRESS) {
@@ -422,6 +442,7 @@ app.get("/api/invoice-status/:hash", async (req, res) => {
 });
 
 import { saveShare, getShare } from "./db/shares.js";
+import { redeemPromo } from "./db/promo.js";
 
 // ─── POST /api/share — save graph, return short ID ───────────────────────────
 

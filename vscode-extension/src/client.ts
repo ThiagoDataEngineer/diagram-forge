@@ -42,7 +42,7 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     headers["Authorization"] = `L402 ${opts.macaroon}:${opts.preimage}`;
   }
 
-  const res = await fetch(`${SERVER}/api/analyze`, {
+  const res = await fetch(`${SERVER}/analyze`, {
     method: "POST",
     headers,
     body: JSON.stringify({ repo_url: opts.repoUrl, tier: opts.tier ?? "basic" }),

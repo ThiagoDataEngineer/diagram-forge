@@ -1,0 +1,37 @@
+{
+  "_reference": {
+    "name": "Event-Driven",
+    "description": "Services communicate exclusively through a central message broker. Each service owns its data store, enabling independent scaling and deployment. An event log provides full auditability."
+  },
+  "nodes": [
+    { "id": "gateway",   "label": "API Gateway",       "type": "gateway",    "technology": "AWS API GW",   "description": "Accepts inbound HTTP requests and publishes events" },
+    { "id": "broker",    "label": "Message Broker",    "type": "queue",      "technology": "Apache Kafka",  "description": "Central event bus; topics per domain" },
+    { "id": "order_svc", "label": "Order Service",     "type": "backend",    "technology": "Node.js",       "description": "Subscribes to payment.confirmed, publishes order.fulfilled" },
+    { "id": "inventory", "label": "Inventory Service", "type": "backend",    "technology": "Go",            "description": "Subscribes to order.created, updates stock" },
+    { "id": "notif",     "label": "Notification Svc",  "type": "backend",    "technology": "Python",        "description": "Sends emails/SMS on domain events" },
+    { "id": "analytics", "label": "Analytics Service", "type": "backend",    "technology": "Scala/Flink",   "description": "Consumes all events for real-time aggregations" },
+    { "id": "orders_db", "label": "Orders DB",         "type": "database",   "technology": "PostgreSQL",    "description": "Order service private store" },
+    { "id": "inv_db",    "label": "Inventory DB",      "type": "database",   "technology": "MySQL",         "description": "Inventory service private store" },
+    { "id": "monitor",   "label": "Monitoring",        "type": "monitoring", "technology": "Grafana/Loki",  "description": "Centralised logs and consumer lag metrics" },
+    { "id": "cache",     "label": "Result Cache",      "type": "cache",      "technology": "Redis",         "description": "Analytics hot-path read cache" }
+  ],
+  "edges": [
+    { "from": "gateway",   "to": "broker",    "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "publish request event" },
+    { "from": "broker",    "to": "order_svc", "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "order.created" },
+    { "from": "broker",    "to": "inventory", "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "order.created" },
+    { "from": "broker",    "to": "notif",     "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "order.fulfilled" },
+    { "from": "broker",    "to": "analytics", "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "all topics" },
+    { "from": "order_svc", "to": "broker",    "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "order.fulfilled" },
+    { "from": "inventory", "to": "broker",    "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "stock.updated" },
+    { "from": "order_svc", "to": "orders_db", "protocol": "SQL",   "direction": "unidirectional", "async": false },
+    { "from": "inventory", "to": "inv_db",    "protocol": "SQL",   "direction": "unidirectional", "async": false },
+    { "from": "analytics", "to": "cache",     "protocol": "Redis", "direction": "unidirectional", "async": false, "label": "write hot results" },
+    { "from": "broker",    "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true,  "label": "consumer lag" },
+    { "from": "order_svc", "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true },
+    { "from": "inventory", "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true },
+    { "from": "analytics", "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true }
+  ],
+  "confidence": 0.95,
+  "tech_stack": ["Node.js", "Go", "Python", "Scala", "Flink", "Kafka", "PostgreSQL", "MySQL", "Redis", "Grafana", "AWS API Gateway"],
+  "summary": "Fully event-driven system where all service communication flows through Kafka; services are fully decoupled and independently deployable."
+}

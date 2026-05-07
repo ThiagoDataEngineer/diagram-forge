@@ -1,0 +1,42 @@
+{
+  "_reference": {
+    "name": "Microservices",
+    "description": "Classic microservices architecture with API gateway, dedicated auth service, multiple independent backends, async message queue, distributed caching, separate databases per service, CDN, and centralized monitoring."
+  },
+  "nodes": [
+    { "id": "cdn",      "label": "CDN",              "type": "cdn",          "technology": "CloudFront",   "description": "Static asset delivery and edge caching" },
+    { "id": "gateway",  "label": "API Gateway",       "type": "gateway",      "technology": "Kong",         "description": "Central entry point, routing, rate limiting" },
+    { "id": "auth",     "label": "Auth Service",      "type": "auth",         "technology": "Keycloak",     "description": "JWT issuance, OAuth2, session management" },
+    { "id": "users",    "label": "User Service",      "type": "backend",      "technology": "Node.js",      "description": "User profiles and preferences" },
+    { "id": "orders",   "label": "Order Service",     "type": "backend",      "technology": "Java/Spring",  "description": "Order lifecycle management" },
+    { "id": "products", "label": "Product Service",   "type": "backend",      "technology": "Go",           "description": "Product catalog and inventory" },
+    { "id": "queue",    "label": "Message Queue",     "type": "queue",        "technology": "RabbitMQ",     "description": "Async inter-service communication" },
+    { "id": "cache",    "label": "Shared Cache",      "type": "cache",        "technology": "Redis",        "description": "Session store and response cache" },
+    { "id": "users_db", "label": "Users DB",          "type": "database",     "technology": "PostgreSQL",   "description": "User data store" },
+    { "id": "orders_db","label": "Orders DB",         "type": "database",     "technology": "PostgreSQL",   "description": "Order and transaction records" },
+    { "id": "prod_db",  "label": "Products DB",       "type": "database",     "technology": "MongoDB",      "description": "Product catalog store" },
+    { "id": "monitor",  "label": "Monitoring",        "type": "monitoring",   "technology": "Prometheus/Grafana", "description": "Metrics, alerts, dashboards" },
+    { "id": "frontend", "label": "Web Frontend",      "type": "frontend",     "technology": "React",        "description": "SPA served from CDN" }
+  ],
+  "edges": [
+    { "from": "frontend",  "to": "cdn",       "protocol": "HTTPS",  "direction": "unidirectional", "async": false },
+    { "from": "cdn",       "to": "gateway",   "protocol": "HTTPS",  "direction": "unidirectional", "async": false },
+    { "from": "gateway",   "to": "auth",      "protocol": "HTTP",   "direction": "unidirectional", "async": false, "label": "validate token" },
+    { "from": "gateway",   "to": "users",     "protocol": "HTTP",   "direction": "unidirectional", "async": false },
+    { "from": "gateway",   "to": "orders",    "protocol": "HTTP",   "direction": "unidirectional", "async": false },
+    { "from": "gateway",   "to": "products",  "protocol": "HTTP",   "direction": "unidirectional", "async": false },
+    { "from": "orders",    "to": "queue",     "protocol": "AMQP",   "direction": "unidirectional", "async": true,  "label": "order.created" },
+    { "from": "queue",     "to": "products",  "protocol": "AMQP",   "direction": "unidirectional", "async": true,  "label": "reserve stock" },
+    { "from": "users",     "to": "cache",     "protocol": "Redis",  "direction": "bidirectional",  "async": false },
+    { "from": "users",     "to": "users_db",  "protocol": "SQL",    "direction": "unidirectional", "async": false },
+    { "from": "orders",    "to": "orders_db", "protocol": "SQL",    "direction": "unidirectional", "async": false },
+    { "from": "products",  "to": "prod_db",   "protocol": "HTTP",   "direction": "unidirectional", "async": false },
+    { "from": "gateway",   "to": "monitor",   "protocol": "HTTP",   "direction": "unidirectional", "async": true,  "label": "metrics" },
+    { "from": "users",     "to": "monitor",   "protocol": "HTTP",   "direction": "unidirectional", "async": true },
+    { "from": "orders",    "to": "monitor",   "protocol": "HTTP",   "direction": "unidirectional", "async": true },
+    { "from": "products",  "to": "monitor",   "protocol": "HTTP",   "direction": "unidirectional", "async": true }
+  ],
+  "confidence": 0.95,
+  "tech_stack": ["React", "Node.js", "Java/Spring", "Go", "PostgreSQL", "MongoDB", "Redis", "RabbitMQ", "Kong", "Prometheus", "CloudFront", "Keycloak"],
+  "summary": "Production-grade microservices system with 3 domain services, dedicated auth, async messaging, distributed caching, per-service databases, CDN, and full observability."
+}

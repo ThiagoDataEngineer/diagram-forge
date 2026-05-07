@@ -1,0 +1,66 @@
+{
+  "name": "diagram-forge",
+  "displayName": "Diagram Forge",
+  "description": "AI-generated architecture diagrams from your repo — powered by Claude, paid via Lightning ⚡",
+  "version": "0.1.0",
+  "publisher": "ShinyDapps",
+  "icon": "icon.png",
+  "repository": { "type": "git", "url": "https://github.com/shinydapps/diagram-forge" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Visualization", "Other"],
+  "keywords": ["architecture", "diagram", "AI", "lightning", "bitcoin"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "diagram-forge",
+          "title": "Diagram Forge",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "diagram-forge": [
+        {
+          "type": "webview",
+          "id": "diagramForge.sidebar",
+          "name": "Diagram Forge"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "diagramForge.analyze",
+        "title": "Diagram Forge: Analyze Repo",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "diagramForge.openLast",
+        "title": "Diagram Forge: Open Last Diagram"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "diagramForge.analyze",
+          "when": "view == diagramForge.sidebar",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch",
+    "package": "npx vsce package",
+    "publish": "npx vsce publish --pat $VSCE_PAT"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Diagram Forge — AI Architecture Diagrams</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:          #0D1117;
+  --bg2:         #161B22;
+  --bg3:         #1C2128;
+  --border:      rgba(255,255,255,0.08);
+  --border-h:    rgba(255,255,255,0.18);
+  --text:        #E6EDF3;
+  --muted:       #768390;
+  --accent:      #7C3AED;
+  --accent2:     #A855F7;
+  --green:       #22C55E;
+  --font:        'Inter','Segoe UI',system-ui,sans-serif;
+  --mono:        'JetBrains Mono','Fira Code','Consolas',monospace;
+}
+html,body { min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+
+/* ── Noise + grid bg ── */
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 85% 60%, rgba(168,85,247,0.10) 0%, transparent 60%);
+}
+
+/* ── Nav ── */
+nav {
+  position:fixed; top:0; left:0; right:0; z-index:50;
+  height:56px; display:flex; align-items:center; padding:0 28px;
+  background:rgba(13,17,23,0.80); backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo { display:flex; align-items:center; gap:9px; text-decoration:none; }
+.nav-logo-mark {
+  width:32px; height:32px; border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; box-shadow:0 0 20px rgba(124,58,237,0.35);
+}
+.nav-logo-text { font-size:15px; font-weight:700; letter-spacing:-0.02em;
+  background:linear-gradient(135deg,#fff 40%,var(--accent2));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.nav-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.nav-pill {
+  font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px;
+  background:rgba(34,197,94,0.12); color:var(--green); border:1px solid rgba(34,197,94,0.25);
+  display:flex; align-items:center; gap:5px;
+}
+.nav-pill-dot { width:6px; height:6px; border-radius:50%; background:var(--green);
+  animation:pulse-g 2s ease-in-out infinite; }
+@keyframes pulse-g { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Hero ── */
+.hero {
+  position:relative; z-index:1;
+  display:flex; flex-direction:column; align-items:center;
+  padding:140px 24px 80px; text-align:center;
+}
+.hero-badge {
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:12px; font-weight:600; padding:5px 14px;
+  border-radius:20px; border:1px solid rgba(124,58,237,0.35);
+  background:rgba(124,58,237,0.10); color:var(--accent2);
+  margin-bottom:28px; letter-spacing:0.02em;
+}
+.hero-badge-icon { font-size:14px; }
+h1 {
+  font-size:clamp(36px,6vw,68px); font-weight:800;
+  letter-spacing:-0.04em; line-height:1.05;
+  max-width:800px; margin-bottom:20px;
+}
+h1 span {
+  background:linear-gradient(135deg,var(--accent2) 0%,#60A5FA 100%);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+}
+.hero-sub {
+  font-size:clamp(15px,2vw,19px); color:var(--muted);
+  max-width:560px; line-height:1.65; margin-bottom:48px;
+}
+
+/* ── Main card ── */
+.card {
+  width:100%; max-width:640px;
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:20px; overflow:hidden;
+  box-shadow:0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+}
+.card-header {
+  padding:20px 24px 0;
+  display:flex; gap:6px; align-items:center;
+}
+.card-dot { width:12px; height:12px; border-radius:50%; }
+.card-title { margin-left:8px; font-size:12px; color:var(--muted); font-family:var(--mono); }
+.card-body { padding:24px; }
+
+/* ── Tier selector ── */
+.tier-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:20px; }
+.tier-btn {
+  padding:12px 8px; border-radius:12px; border:1.5px solid var(--border);
+  background:var(--bg3); cursor:pointer; text-align:center;
+  transition:border-color .15s, background .15s, box-shadow .15s;
+  position:relative; overflow:hidden;
+}
+.tier-btn:hover { border-color:var(--border-h); }
+.tier-btn.selected {
+  border-color:var(--accent2);
+  background:rgba(124,58,237,0.12);
+  box-shadow:0 0 0 1px rgba(168,85,247,0.2);
+}
+.tier-check {
+  position:absolute; top:7px; right:8px;
+  width:16px; height:16px; border-radius:50%;
+  background:var(--accent2); display:none;
+  align-items:center; justify-content:center; font-size:10px;
+}
+.tier-btn.selected .tier-check { display:flex; }
+.tier-name { font-size:13px; font-weight:700; margin-bottom:3px; }
+.tier-sats { font-size:11px; color:var(--muted); font-family:var(--mono); }
+.tier-desc { font-size:10px; color:var(--muted); margin-top:5px; line-height:1.4; }
+
+/* ── Input ── */
+.input-label { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:8px; letter-spacing:0.04em; text-transform:uppercase; }
+.input-wrap { position:relative; margin-bottom:12px; }
+.input-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:16px; pointer-events:none; }
+input[type=text], input[type=url] {
+  width:100%; background:var(--bg3); border:1.5px solid var(--border);
+  border-radius:12px; color:var(--text); font-size:14px; font-family:var(--font);
+  padding:13px 14px 13px 42px; outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+input[type=text]:focus, input[type=url]:focus {
+  border-color:var(--accent2);
+  box-shadow:0 0 0 3px rgba(168,85,247,0.15);
+}
+input::placeholder { color:var(--muted); }
+.input-or {
+  text-align:center; font-size:12px; color:var(--muted);
+  position:relative; margin:12px 0;
+}
+.input-or::before, .input-or::after {
+  content:''; position:absolute; top:50%; width:43%; height:1px; background:var(--border);
+}
+.input-or::before { left:0; }
+.input-or::after { right:0; }
+
+/* ── Submit btn ── */
+.btn-submit {
+  width:100%; padding:15px; border-radius:12px; border:none;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff; font-size:15px; font-weight:700; font-family:var(--font);
+  cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px;
+  transition:opacity .15s, transform .1s, box-shadow .15s;
+  box-shadow:0 4px 20px rgba(124,58,237,0.35);
+  position:relative; overflow:hidden;
+}
+.btn-submit:hover { opacity:.92; box-shadow:0 8px 32px rgba(124,58,237,0.45); }
+.btn-submit:active { transform:scale(0.985); }
+.btn-submit:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+.btn-submit-shimmer {
+  position:absolute; top:0; left:-100%; width:50%; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
+  animation:shimmer 2s ease-in-out infinite;
+}
+@keyframes shimmer { to { left:200%; } }
+.btn-submit-icon { font-size:18px; }
+
+/* ── Error ── */
+.error-box {
+  background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.25);
+  border-radius:10px; padding:12px 14px; font-size:13px; color:#FCA5A5;
+  margin-top:12px; display:none;
+}
+.error-box.show { display:block; }
+
+/* ── Features grid ── */
+.features {
+  position:relative; z-index:1;
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px; max-width:900px; margin:64px auto 0; padding:0 24px 80px;
+}
+.feature-card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:16px; padding:20px;
+  transition:border-color .2s, box-shadow .2s;
+}
+.feature-card:hover { border-color:var(--border-h); box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+.feature-icon { font-size:24px; margin-bottom:12px; }
+.feature-title { font-size:14px; font-weight:700; margin-bottom:6px; }
+.feature-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+
+/* ── Langs supported ── */
+.langs {
+  position:relative; z-index:1;
+  text-align:center; padding:0 24px 48px;
+}
+.langs-title { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px; }
+.langs-list { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:700px; margin:0 auto; }
+.lang-pill {
+  font-size:11px; font-weight:600; padding:4px 10px; border-radius:6px;
+  background:var(--bg2); border:1px solid var(--border); color:var(--muted);
+}
+
+/* ── Loading state ── */
+.btn-submit.loading .btn-submit-text { display:none; }
+.btn-submit.loading::after {
+  content:''; width:18px; height:18px; border:2.5px solid rgba(255,255,255,0.3);
+  border-top-color:#fff; border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark">⚡</div>
+    <span class="nav-logo-text">Diagram Forge</span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-pill">
+      <div class="nav-pill-dot"></div>
+      Live
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-icon">✦</span>
+    Powered by Claude · Paid via Lightning L402
+  </div>
+
+  <h1>Your repo →<br/><span>living diagram</span><br/>in seconds</h1>
+
+  <p class="hero-sub">
+    Paste any GitHub URL or local path. Claude analyzes the architecture,
+    generates an animated diagram with official logos — pay per analysis via Lightning.
+  </p>
+
+  <!-- Main card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot" style="background:#FF5F57"></div>
+      <div class="card-dot" style="background:#FFBD2E"></div>
+      <div class="card-dot" style="background:#28C840"></div>
+      <span class="card-title">diagram-forge — analyze</span>
+    </div>
+    <div class="card-body">
+
+      <!-- Tier selector -->
+      <div class="input-label">Analysis tier</div>
+      <div class="tier-row" id="tier-row">
+        <div class="tier-btn selected" data-tier="basic">
+          <div class="tier-check">✓</div>
+          <div class="tier-name">Basic</div>
+          <div class="tier-sats">100 sats</div>
+          <div class="tier-desc">Quick scan, main services</div>
+        </div>
+        <div class="tier-btn" data-tier="full">
+          <div class="tier-check">✓</div>
+          <div class="tier-name">Full</div>
+          <div class="tier-sats">500 sats</div>
+          <div class="tier-desc">Complete repo, all connections</div>
+        </div>
+        <div class="tier-btn" data-tier="live">
+          <div class="tier-check">✓</div>
+          <div class="tier-name">Live ✦</div>
+          <div class="tier-sats">1000 sats</div>
+          <div class="tier-desc">Full + animated diagram</div>
+        </div>
+      </div>
+
+      <!-- GitHub URL input -->
+      <div class="input-label">Repository</div>
+      <div class="input-wrap">
+        <span class="input-icon">🐙</span>
+        <input type="url" id="input-github" placeholder="https://github.com/user/repo"
+          autocomplete="off" spellcheck="false"/>
+      </div>
+
+      <div class="input-or">or local path</div>
+
+      <div class="input-wrap">
+        <span class="input-icon">📁</span>
+        <input type="text" id="input-local" placeholder="/home/user/my-project  or  C:\projects\api"
+          autocomplete="off" spellcheck="false"/>
+      </div>
+
+      <div class="input-or">or import from image</div>
+
+      <div id="image-drop-zone" style="
+        border:2px dashed var(--border-h); border-radius:12px; padding:18px 14px;
+        text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+        background:var(--bg3);" onclick="document.getElementById('landing-image-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent2)'"
+        ondragleave="this.style.borderColor=''"
+        ondrop="handleLandingImageDrop(event)">
+        <input type="file" id="landing-image-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf" style="display:none"
+          onchange="handleLandingImageFile(this.files[0])">
+        <div id="landing-image-preview" style="display:none;margin-bottom:8px">
+          <img id="landing-image-thumb" style="max-height:80px;max-width:100%;border-radius:6px;object-fit:contain"/>
+          <div id="landing-image-name" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+        </div>
+        <div id="landing-image-placeholder" style="color:var(--muted);font-size:13px">
+          <span style="font-size:22px;display:block;margin-bottom:4px">🖼️</span>
+          Whiteboard · Screenshot · Visio / Lucidchart · PDF
+        </div>
+      </div>
+
+      <div class="error-box" id="error-box"></div>
+
+      <button class="btn-submit" id="btn-analyze" style="margin-top:16px">
+        <div class="btn-submit-shimmer"></div>
+        <span class="btn-submit-icon">⚡</span>
+        <span class="btn-submit-text" id="btn-analyze-text">Analyze & Generate Diagram</span>
+      </button>
+
+    </div>
+  </div>
+</div>
+
+<!-- Language support -->
+<div class="langs">
+  <div class="langs-title">Works with any stack</div>
+  <div class="langs-list">
+    <span class="lang-pill">TypeScript</span><span class="lang-pill">JavaScript</span>
+    <span class="lang-pill">Python</span><span class="lang-pill">Java</span>
+    <span class="lang-pill">Scala</span><span class="lang-pill">Go</span>
+    <span class="lang-pill">Rust</span><span class="lang-pill">Ruby</span>
+    <span class="lang-pill">Jupyter Notebooks</span><span class="lang-pill">Databricks</span>
+    <span class="lang-pill">Apache Spark</span><span class="lang-pill">dbt</span>
+    <span class="lang-pill">Airflow</span><span class="lang-pill">Terraform</span>
+    <span class="lang-pill">Docker Compose</span><span class="lang-pill">Kubernetes</span>
+    <span class="lang-pill">Monorepos</span><span class="lang-pill">Maestro</span>
+  </div>
+</div>
+
+<!-- Features -->
+<div class="features">
+  <div class="feature-card">
+    <div class="feature-icon">🧠</div>
+    <div class="feature-title">Agentic analysis</div>
+    <div class="feature-desc">Claude autonomously explores your codebase with filesystem tools — no manual configuration needed.</div>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">✨</div>
+    <div class="feature-title">Living diagrams</div>
+    <div class="feature-desc">Particles flow along edges in real time, colored and sized by protocol. WebSocket = fast. SQL = heavy.</div>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🏷️</div>
+    <div class="feature-title">Official logos</div>
+    <div class="feature-desc">80+ technologies auto-detected and displayed with their official Simple Icons branding.</div>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">⚡</div>
+    <div class="feature-title">Pay per use</div>
+    <div class="feature-desc">L402 Lightning payments. No account, no subscription. Pay sats, get diagram instantly.</div>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🔍</div>
+    <div class="feature-title">Interactive viewer</div>
+    <div class="feature-desc">Pan, zoom, click nodes to inspect connections. Minimap, search, export SVG.</div>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🌐</div>
+    <div class="feature-title">Any language</div>
+    <div class="feature-desc">Polyglot support — JS, Python, JVM, Go, Rust, notebooks, infra as code.</div>
+  </div>
+</div>
+
+<script>
+// ── Tier selection ─────────────────────────────────────────────
+let selectedTier = 'basic';
+document.querySelectorAll('.tier-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tier-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedTier = btn.dataset.tier;
+  });
+});
+
+// ── Image import on landing ────────────────────────────────────
+let _landingImageBase64 = null;
+let _landingImageMediaType = 'image/jpeg';
+
+function handleLandingImageFile(file) {
+  if (!file) return;
+  _landingImageMediaType = file.type || 'image/jpeg';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _landingImageBase64 = ev.target.result.split(',')[1];
+    document.getElementById('landing-image-placeholder').style.display = 'none';
+    const prev = document.getElementById('landing-image-preview');
+    prev.style.display = 'block';
+    document.getElementById('landing-image-thumb').src = ev.target.result;
+    document.getElementById('landing-image-name').textContent = file.name + ' · ' + Math.round(file.size/1024) + ' KB';
+    // Clear repo inputs — image takes precedence
+    document.getElementById('input-github').value = '';
+    document.getElementById('input-local').value = '';
+    document.getElementById('btn-analyze-text').textContent = 'Analyze Image & Generate Diagram';
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleLandingImageDrop(e) {
+  e.preventDefault();
+  e.currentTarget.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (file) handleLandingImageFile(file);
+}
+
+// ── Submit ─────────────────────────────────────────────────────
+document.getElementById('btn-analyze').addEventListener('click', async () => {
+  const github = document.getElementById('input-github').value.trim();
+  const local  = document.getElementById('input-local').value.trim();
+  const errBox = document.getElementById('error-box');
+  const btn    = document.getElementById('btn-analyze');
+
+  // Image path: bypass L402, send to analyze-image, redirect to viewer
+  if (_landingImageBase64) {
+    errBox.classList.remove('show');
+    btn.classList.add('loading');
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: _landingImageBase64, media_type: _landingImageMediaType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Analysis failed');
+      window.location.href = '/view?file=' + encodeURIComponent(data.filename);
+    } catch (err) {
+      errBox.textContent = err.message ?? 'Image analysis failed';
+      errBox.classList.add('show');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  errBox.classList.remove('show');
+
+  if (!github && !local) {
+    showError('Please enter a GitHub URL or a local path.');
+    return;
+  }
+
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  const body = {
+    tier: selectedTier,
+    ...(github ? { repo_url: github } : { repo_path: local }),
+  };
+
+  try {
+    // Step 1: initial request — will get 402
+    const r1 = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (r1.status !== 402) {
+      const data = await r1.json();
+      showError(data.error ?? 'Unexpected response');
+      return;
+    }
+
+    const data = await r1.json();
+    const wwwAuth = r1.headers.get('WWW-Authenticate') ?? '';
+    const macaroon = (wwwAuth.match(/macaroon="([^"]+)"/) ?? [])[1];
+    const invoice  = data.invoice;
+    const hash     = data.payment_hash;
+
+    if (!invoice || !macaroon || !hash) {
+      showError('Server did not return a valid invoice.');
+      return;
+    }
+
+    // Step 2: try WebLN (Alby, etc.)
+    let preimage = null;
+
+    if (typeof window.webln !== 'undefined') {
+      try {
+        await window.webln.enable();
+        const result = await window.webln.sendPayment(invoice);
+        preimage = result.preimage;
+      } catch (e) {
+        console.log('WebLN payment failed, falling back to QR page:', e);
+      }
+    }
+
+    if (preimage) {
+      // WebLN success — retry with proof
+      await retryWithProof(macaroon, preimage, body);
+    } else {
+      // No WebLN — redirect to payment page
+      const params = new URLSearchParams({
+        invoice, macaroon, hash, tier: selectedTier,
+        ...(github ? { repo_url: github } : { repo_path: local }),
+      });
+      window.location.href = '/pay?' + params.toString();
+    }
+
+  } catch (err) {
+    showError(err.message ?? 'Network error');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+});
+
+async function retryWithProof(macaroon, preimage, body) {
+  const r = await fetch('/analyze', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `L402 ${macaroon}:${preimage}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const d = await r.json();
+    showError(d.error ?? 'Analysis failed');
+    return;
+  }
+  const result = await r.json();
+  // Store graph and redirect to viewer
+  sessionStorage.setItem('df-graph', JSON.stringify(result.graph));
+  window.location.href = '/view?from=session';
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-box');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// ── Enter key on inputs ────────────────────────────────────────
+['input-github','input-local'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btn-analyze').click();
+  });
+});
+</script>
+</body>
+</html>

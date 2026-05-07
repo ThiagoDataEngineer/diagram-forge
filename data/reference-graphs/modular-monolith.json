@@ -1,0 +1,26 @@
+{
+  "_reference": {
+    "name": "Modular Monolith",
+    "description": "Single deployable backend with well-defined internal module boundaries, a CDN for frontend delivery, Redis cache, single relational database, and a monitoring stack. Simple, low-ops overhead."
+  },
+  "nodes": [
+    { "id": "cdn",      "label": "CDN",              "type": "cdn",        "technology": "Cloudflare",    "description": "Static asset distribution" },
+    { "id": "frontend", "label": "Web Frontend",     "type": "frontend",   "technology": "Vue.js",        "description": "SPA delivered via CDN" },
+    { "id": "monolith", "label": "App Monolith",     "type": "backend",    "technology": "Rails/Django",  "description": "Modular monolith — all domain logic in one process" },
+    { "id": "cache",    "label": "Cache",            "type": "cache",      "technology": "Redis",         "description": "Page and fragment caching" },
+    { "id": "db",       "label": "Primary Database", "type": "database",   "technology": "PostgreSQL",    "description": "Single relational datastore" },
+    { "id": "monitor",  "label": "Monitoring",       "type": "monitoring", "technology": "Datadog",       "description": "APM, logs, uptime alerts" }
+  ],
+  "edges": [
+    { "from": "frontend",  "to": "cdn",      "protocol": "HTTPS", "direction": "unidirectional", "async": false },
+    { "from": "cdn",       "to": "monolith", "protocol": "HTTPS", "direction": "unidirectional", "async": false },
+    { "from": "monolith",  "to": "cache",    "protocol": "Redis", "direction": "bidirectional",  "async": false },
+    { "from": "monolith",  "to": "db",       "protocol": "SQL",   "direction": "unidirectional", "async": false },
+    { "from": "monolith",  "to": "monitor",  "protocol": "HTTP",  "direction": "unidirectional", "async": true,  "label": "metrics/traces" },
+    { "from": "cdn",       "to": "monitor",  "protocol": "HTTP",  "direction": "unidirectional", "async": true,  "label": "access logs" },
+    { "from": "monolith",  "to": "db",       "protocol": "SQL",   "direction": "bidirectional",  "async": false, "label": "read replica" }
+  ],
+  "confidence": 0.95,
+  "tech_stack": ["Vue.js", "Rails", "PostgreSQL", "Redis", "Cloudflare", "Datadog"],
+  "summary": "Simple modular monolith suitable for small-to-medium teams — one deployable unit, minimal infra complexity, with caching and monitoring built in."
+}

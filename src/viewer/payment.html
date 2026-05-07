@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Pay to Analyze — Diagram Forge</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;700&display=swap');
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --bg:#03040A;
+  --bg2:#07090F;
+  --bg3:#0C0F1A;
+  --border:rgba(0,255,180,0.12);
+  --border-h:rgba(0,255,180,0.35);
+  --text:#E8F4F0;
+  --muted:#5A7A70;
+  --cyan:#00FFD1;
+  --cyan2:#00CFFF;
+  --green:#39FF14;
+  --yellow:#FFD000;
+  --red:#FF3060;
+  --font:'Inter','Segoe UI',system-ui,sans-serif;
+  --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+  --display:'Rajdhani','Inter',sans-serif;
+}
+
+html, body {
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  -webkit-font-smoothing:antialiased;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* ── Grid background ── */
+body::before {
+  content:'';
+  position:fixed; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,255,209,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,209,0.04) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+body::after {
+  content:'';
+  position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(0,207,255,0.12) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 30% at 80% 90%, rgba(0,255,209,0.07) 0%, transparent 60%);
+}
+
+/* ── L402 badge ── */
+.l402-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase;
+  background:rgba(0,255,209,0.08); border:1px solid rgba(0,255,209,0.3);
+  color:var(--cyan); border-radius:4px; padding:3px 10px;
+  font-family:var(--mono);
+  text-shadow:0 0 8px rgba(0,255,209,0.6);
+}
+.l402-badge::before {
+  content:''; width:6px; height:6px; border-radius:50%;
+  background:var(--cyan);
+  box-shadow:0 0 6px var(--cyan);
+  animation:status-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Card ── */
+.card {
+  position:relative; z-index:1;
+  width:100%; max-width:460px; margin:20px;
+  background:var(--bg2);
+  border:1px solid rgba(0,255,209,0.18);
+  border-radius:4px;
+  overflow:hidden;
+  box-shadow:
+    0 0 0 1px rgba(0,255,209,0.06),
+    0 0 40px rgba(0,207,255,0.08),
+    0 0 80px rgba(0,255,209,0.04),
+    0 32px 80px rgba(0,0,0,0.8);
+}
+/* Neon top bar */
+.card::before {
+  content:'';
+  display:block;
+  height:2px;
+  background:linear-gradient(90deg, transparent, var(--cyan2), var(--cyan), var(--cyan2), transparent);
+  box-shadow:0 0 12px var(--cyan), 0 0 24px rgba(0,255,209,0.4);
+}
+/* Corner accent */
+.card::after {
+  content:'';
+  position:absolute; top:0; right:0;
+  width:60px; height:60px;
+  background:linear-gradient(225deg, rgba(0,255,209,0.08) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+/* ── Speed stripe ── */
+.speed-stripe {
+  height:3px;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    rgba(0,207,255,0.0) 10%,
+    rgba(0,255,209,0.6) 40%,
+    rgba(0,207,255,0.8) 60%,
+    rgba(57,255,20,0.4) 80%,
+    transparent 100%
+  );
+  animation:stripe-slide 3s linear infinite;
+  background-size:200% 100%;
+}
+@keyframes stripe-slide {
+  0%   { background-position:200% 0; }
+  100% { background-position:-200% 0; }
+}
+
+/* ── Header ── */
+.card-header {
+  padding:22px 24px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px;
+}
+.header-icon {
+  width:44px; height:44px; border-radius:4px; flex-shrink:0;
+  background:linear-gradient(135deg, rgba(0,207,255,0.2), rgba(0,255,209,0.1));
+  border:1px solid rgba(0,255,209,0.25);
+  display:flex; align-items:center; justify-content:center; font-size:22px;
+  box-shadow:0 0 20px rgba(0,255,209,0.15), inset 0 0 20px rgba(0,207,255,0.05);
+}
+.header-text h2 {
+  font-size:16px; font-weight:700; margin-bottom:2px;
+  font-family:var(--display);
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  color:var(--cyan);
+  text-shadow:0 0 12px rgba(0,255,209,0.5);
+}
+.header-text p { font-size:11px; color:var(--muted); font-family:var(--mono); }
+
+/* ── Amount ── */
+.amount-row {
+  display:flex; align-items:baseline; justify-content:center; gap:8px;
+  padding:24px 24px 0;
+}
+.amount-num {
+  font-size:56px; font-weight:700; letter-spacing:-0.03em;
+  font-family:var(--display);
+  color:var(--cyan);
+  text-shadow:0 0 20px rgba(0,255,209,0.6), 0 0 40px rgba(0,255,209,0.2);
+}
+.amount-unit {
+  font-size:14px; color:var(--muted); font-weight:600;
+  font-family:var(--mono); text-transform:uppercase; letter-spacing:0.1em;
+  margin-bottom:4px;
+}
+.amount-usd {
+  font-size:11px; color:var(--muted); text-align:center;
+  margin-top:4px; padding-bottom:18px;
+  font-family:var(--mono);
+}
+
+/* ── QR ── */
+.qr-wrap {
+  margin:0 24px;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:4px; padding:18px;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  position:relative; overflow:hidden;
+}
+.qr-wrap::before {
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,255,209,0.04) 0%, transparent 70%);
+}
+/* Scanlines */
+.qr-wrap::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,255,209,0.015) 2px,
+    rgba(0,255,209,0.015) 4px
+  );
+}
+.qr-ring {
+  position:relative; z-index:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.qr-ring::before, .qr-ring::after {
+  content:''; position:absolute;
+  border-radius:4px;
+  border:1px solid rgba(0,255,209,0.2);
+  animation:ring-pulse 2.5s ease-in-out infinite;
+}
+.qr-ring::before { inset:-10px; animation-delay:0s; }
+.qr-ring::after  { inset:-22px; animation-delay:0.8s; }
+@keyframes ring-pulse {
+  0%,100%{ opacity:0.8; }
+  50%    { opacity:0.15; transform:scale(1.03); }
+}
+#qr-img {
+  width:196px; height:196px; border-radius:4px;
+  background:#FFFFFF; padding:10px;
+  position:relative; z-index:1;
+  box-shadow:0 0 0 1px rgba(0,255,209,0.2), 0 0 30px rgba(0,255,209,0.12);
+}
+#qr-img img { width:100%; height:100%; display:block; }
+.qr-placeholder {
+  width:100%; height:100%;
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:8px;
+  background:#fff; border-radius:2px;
+  color:#ccc; font-size:11px; font-family:var(--mono); text-align:center;
+}
+.qr-tip { font-size:11px; color:var(--muted); text-align:center; position:relative; z-index:1; font-family:var(--mono); }
+.qr-wallets {
+  display:flex; flex-wrap:wrap; gap:6px; position:relative; z-index:1; justify-content:center;
+}
+.wallet-tag {
+  font-size:9px; font-weight:700; padding:3px 8px; border-radius:3px;
+  background:rgba(0,255,209,0.04); border:1px solid rgba(0,255,209,0.12);
+  color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;
+  font-family:var(--mono);
+  transition:border-color .15s, color .15s;
+}
+.wallet-tag:hover { border-color:rgba(0,255,209,0.3); color:var(--cyan); }
+
+/* ── Invoice string ── */
+.invoice-wrap { padding:14px 24px 0; }
+.invoice-label {
+  font-size:9px; font-weight:700; text-transform:uppercase;
+  letter-spacing:0.12em; color:var(--muted); margin-bottom:6px;
+  font-family:var(--mono);
+}
+.invoice-box {
+  display:flex; align-items:center; gap:8px;
+  background:var(--bg3); border:1px solid var(--border);
+  border-radius:3px; padding:9px 12px;
+}
+.invoice-str {
+  flex:1; font-family:var(--mono); font-size:10px; color:var(--muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.copy-btn {
+  flex-shrink:0; background:none; border:1px solid var(--border);
+  border-radius:3px; color:var(--muted); font-size:10px; font-family:var(--mono);
+  padding:4px 10px; cursor:pointer; transition:all .1s; text-transform:uppercase; letter-spacing:0.06em;
+}
+.copy-btn:hover { border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 8px rgba(0,255,209,0.2); }
+.copy-btn.copied { color:var(--green); border-color:rgba(57,255,20,0.3); text-shadow:0 0 8px rgba(57,255,20,0.5); }
+
+/* ── Status ── */
+.status-wrap { padding:18px 24px; display:flex; align-items:center; gap:10px; }
+.status-dot {
+  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  background:var(--yellow);
+  box-shadow:0 0 8px var(--yellow);
+  animation:status-pulse 1.5s ease-in-out infinite;
+}
+.status-dot.paid { background:var(--green); box-shadow:0 0 10px var(--green); animation:none; }
+@keyframes status-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.7)} }
+.status-text { font-size:12px; font-family:var(--mono); }
+.status-sub { font-size:10px; color:var(--muted); font-family:var(--mono); margin-top:2px; }
+.status-timer {
+  margin-left:auto; font-family:var(--mono); font-size:13px; font-weight:700;
+  color:var(--cyan); text-shadow:0 0 8px rgba(0,255,209,0.4);
+}
+
+/* ── Dev mode banner ── */
+.dev-banner {
+  background:rgba(255,208,0,0.06); border:1px solid rgba(255,208,0,0.2);
+  border-radius:3px; padding:10px 14px; margin:0 24px 16px;
+  font-size:11px; color:#FFD000; display:none;
+  align-items:center; gap:8px; font-family:var(--mono);
+}
+.dev-banner.show { display:flex; }
+.btn-dev-pay {
+  margin-left:auto; background:rgba(255,208,0,0.1); border:1px solid rgba(255,208,0,0.25);
+  border-radius:3px; color:#FFD000; font-size:10px; font-weight:700;
+  padding:4px 12px; cursor:pointer; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em;
+  transition:background .1s;
+}
+.btn-dev-pay:hover { background:rgba(255,208,0,0.2); }
+
+/* ── Manual preimage fallback ── */
+.manual-wrap { padding:0 24px 20px; }
+.manual-toggle {
+  font-size:10px; color:var(--muted); cursor:pointer;
+  text-decoration:none; background:none; border:none; font-family:var(--mono);
+  margin-bottom:10px; display:block; letter-spacing:0.04em; text-transform:uppercase;
+  transition:color .1s;
+}
+.manual-toggle:hover { color:var(--cyan); }
+.manual-input-wrap { display:none; }
+.manual-input-wrap.open { display:block; }
+.preimage-input {
+  width:100%; background:var(--bg3); border:1px solid var(--border);
+  border-radius:3px; color:var(--text); font-size:11px; font-family:var(--mono);
+  padding:10px 12px; outline:none; margin-bottom:10px;
+  transition:border-color .15s;
+}
+.preimage-input:focus { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,255,209,0.08); }
+.preimage-input::placeholder { color:var(--muted); font-size:10px; }
+.btn-manual {
+  width:100%; padding:11px; border-radius:3px; border:1px solid var(--border);
+  background:var(--bg3); color:var(--text); font-size:12px; font-weight:600;
+  font-family:var(--mono); cursor:pointer; text-transform:uppercase; letter-spacing:0.06em;
+  transition:all .1s;
+}
+.btn-manual:hover { border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 12px rgba(0,255,209,0.1); }
+
+/* ── Success overlay ── */
+.success-overlay {
+  position:fixed; inset:0; z-index:100;
+  background:rgba(3,4,10,0.96); backdrop-filter:blur(16px);
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center; gap:16px;
+  text-align:center; padding:24px;
+}
+.success-overlay::before {
+  content:'';
+  position:absolute; inset:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,255,209,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,209,0.04) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+.success-overlay.show { display:flex; }
+.success-check {
+  position:relative; z-index:1;
+  width:76px; height:76px; border-radius:50%;
+  background:rgba(57,255,20,0.08); border:1.5px solid rgba(57,255,20,0.5);
+  display:flex; align-items:center; justify-content:center; font-size:32px;
+  animation:pop .5s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 0 40px rgba(57,255,20,0.2), 0 0 80px rgba(57,255,20,0.08);
+}
+@keyframes pop { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+.success-title {
+  position:relative; z-index:1;
+  font-size:22px; font-weight:700;
+  font-family:var(--display); text-transform:uppercase; letter-spacing:0.1em;
+  color:var(--green); text-shadow:0 0 20px rgba(57,255,20,0.5);
+}
+.success-sub { position:relative; z-index:1; font-size:13px; color:var(--muted); font-family:var(--mono); }
+.progress-bar {
+  position:relative; z-index:1;
+  width:220px; height:2px; background:rgba(0,255,209,0.1); border-radius:2px; overflow:hidden;
+}
+.progress-fill {
+  height:100%;
+  background:linear-gradient(90deg, var(--cyan2), var(--cyan), var(--green));
+  border-radius:2px; animation:progress 2.2s linear forwards;
+  box-shadow:0 0 8px var(--cyan);
+}
+@keyframes progress { from{width:0} to{width:100%} }
+
+/* ── Back link ── */
+.back-link {
+  display:block; text-align:center; padding:10px 24px 20px;
+  font-size:10px; color:var(--muted); text-decoration:none;
+  font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em;
+  transition:color .1s;
+}
+.back-link:hover { color:var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="speed-stripe"></div>
+
+  <!-- Header -->
+  <div class="card-header">
+    <div class="header-icon">⚡</div>
+    <div class="header-text">
+      <h2>Lightning Payment</h2>
+      <p id="header-sub">Initializing…</p>
+    </div>
+    <span class="l402-badge">L402</span>
+  </div>
+
+  <!-- Amount -->
+  <div class="amount-row">
+    <span class="amount-num" id="amount-num">—</span>
+    <span class="amount-unit">sats</span>
+  </div>
+  <div class="amount-usd" id="amount-usd">Loading…</div>
+
+  <!-- QR Code -->
+  <div class="qr-wrap">
+    <div class="qr-ring">
+      <div id="qr-img">
+        <div class="qr-placeholder" id="qr-placeholder">
+          <span style="font-size:24px">⚡</span>
+          <span>Loading QR…</span>
+        </div>
+        <img id="qr-image" src="" alt="Lightning invoice QR" style="display:none;width:100%;height:100%;"/>
+      </div>
+    </div>
+    <div class="qr-tip">Scan with any Lightning wallet</div>
+    <div class="qr-wallets">
+      <span class="wallet-tag">Alby</span>
+      <span class="wallet-tag">Phoenix</span>
+      <span class="wallet-tag">Muun</span>
+      <span class="wallet-tag">WoS</span>
+      <span class="wallet-tag">Blink</span>
+      <span class="wallet-tag">Primal</span>
+      <span class="wallet-tag">Nostr Wallet</span>
+    </div>
+  </div>
+
+  <!-- Invoice string -->
+  <div class="invoice-wrap">
+    <div class="invoice-label">Invoice</div>
+    <div class="invoice-box">
+      <span class="invoice-str" id="invoice-str">Loading…</span>
+      <button class="copy-btn" id="copy-btn">Copy</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-wrap">
+    <div class="status-dot" id="status-dot"></div>
+    <div>
+      <div class="status-text" id="status-text">Waiting for payment…</div>
+      <div class="status-sub" id="status-sub">Polling every 3s</div>
+    </div>
+    <div class="status-timer" id="status-timer">9:59</div>
+  </div>
+
+  <!-- Dev mode banner -->
+  <div class="dev-banner" id="dev-banner">
+    <span>⚗ Mock mode — no real payment needed</span>
+    <button class="btn-dev-pay" id="btn-dev-pay">Simulate Payment</button>
+  </div>
+
+  <!-- Manual preimage fallback -->
+  <div class="manual-wrap">
+    <button class="manual-toggle" id="manual-toggle">
+      Paid but not detecting? Enter preimage →
+    </button>
+    <div class="manual-input-wrap" id="manual-input-wrap">
+      <input class="preimage-input" id="preimage-input"
+        placeholder="Payment preimage (hex, 64 chars)…"/>
+      <button class="btn-manual" id="btn-manual-submit">Continue with preimage</button>
+    </div>
+  </div>
+
+  <a class="back-link" href="/">← Back to Diagram Forge</a>
+</div>
+
+<!-- Success overlay -->
+<div class="success-overlay" id="success-overlay">
+  <div class="success-check">✓</div>
+  <div class="success-title">Payment Confirmed</div>
+  <div class="success-sub">Analyzing your repository…</div>
+  <div class="progress-bar"><div class="progress-fill"></div></div>
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+let   invoice  = params.get('invoice')  ?? '';
+let   macaroon = params.get('macaroon') ?? '';
+let   hash     = params.get('payment_hash') ?? params.get('hash') ?? '';
+const tier     = params.get('tier')     ?? 'full';
+const repoUrl  = params.get('repo_url') ?? '';
+const repoPath = params.get('repo_path') ?? '';
+const sats     = { basic:100, full:500, live:1000 }[tier] ?? 500;
+
+document.getElementById('amount-num').textContent = sats;
+document.getElementById('header-sub').textContent =
+  `${tier.toUpperCase()} · ${(repoUrl || repoPath || 'local').replace('https://github.com/', '')}`;
+
+// Sats → USD
+fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+  .then(r => r.json())
+  .then(d => {
+    const btcUsd = d?.bitcoin?.usd ?? 0;
+    const usd = ((sats / 100_000_000) * btcUsd).toFixed(4);
+    document.getElementById('amount-usd').textContent = `≈ $${usd} USD`;
+  })
+  .catch(() => { document.getElementById('amount-usd').textContent = ''; });
+
+function showQR(invoiceStr) {
+  if (!invoiceStr) return;
+  fetch(`/api/qr?invoice=${encodeURIComponent(invoiceStr)}`)
+    .then(r => r.text())
+    .then(src => {
+      const img = document.getElementById('qr-image');
+      img.src = src;
+      img.style.display = 'block';
+      document.getElementById('qr-placeholder').style.display = 'none';
+    })
+    .catch(() => {});
+  document.getElementById('invoice-str').textContent = invoiceStr;
+}
+
+// If no invoice in URL, request one from the server
+async function init() {
+  if (invoice) {
+    showQR(invoice);
+    if (invoice.startsWith('lnbc_mock_')) {
+      document.getElementById('dev-banner').classList.add('show');
+    }
+    startPolling();
+    return;
+  }
+
+  // Auto-request invoice
+  try {
+    document.getElementById('invoice-str').textContent = 'Requesting invoice…';
+    const body = { tier, ...(repoUrl ? { repo_url: repoUrl } : { repo_path: repoPath }) };
+    const r = await fetch('/analyze', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Accept:'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (r.status === 402) {
+      const d = await r.json();
+      invoice  = d.invoice  ?? '';
+      macaroon = d.macaroon ?? '';
+      hash     = d.payment_hash ?? '';
+      showQR(invoice);
+      if (invoice.startsWith('lnbc_mock_')) {
+        document.getElementById('dev-banner').classList.add('show');
+      }
+      startPolling();
+    } else {
+      document.getElementById('invoice-str').textContent = 'Error requesting invoice — go back and click Analyze';
+    }
+  } catch (e) {
+    document.getElementById('invoice-str').textContent = 'Network error — go back and try again';
+  }
+}
+
+init();
+
+// ── Copy invoice ─────────────────────────────────────────────
+document.getElementById('copy-btn').addEventListener('click', () => {
+  if (!invoice) return;
+  navigator.clipboard.writeText(invoice).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+});
+
+// ── Countdown ────────────────────────────────────────────────
+let remaining = 600;
+const timerEl = document.getElementById('status-timer');
+const timerInterval = setInterval(() => {
+  remaining--;
+  if (remaining <= 0) { clearInterval(timerInterval); timerEl.textContent = 'Expired'; return; }
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  timerEl.textContent = `${m}:${String(s).padStart(2,'0')}`;
+}, 1000);
+
+// ── Payment polling ──────────────────────────────────────────
+let pollInterval;
+let analyzing = false;
+
+async function checkPayment() {
+  if (analyzing || !hash) return;
+  try {
+    const r = await fetch(`/api/invoice-status/${hash}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.paid && d.preimage) {
+      clearInterval(pollInterval);
+      await onPaid(d.preimage);
+    }
+  } catch { /* keep polling */ }
+}
+
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(checkPayment, 3000);
+}
+
+// ── On paid ──────────────────────────────────────────────────
+async function onPaid(preimage) {
+  if (analyzing) return;
+  analyzing = true;
+  clearInterval(pollInterval);
+  clearInterval(timerInterval);
+
+  const dot = document.getElementById('status-dot');
+  dot.classList.add('paid');
+  document.getElementById('status-text').textContent = 'Payment confirmed!';
+  document.getElementById('status-sub').textContent  = 'Starting analysis…';
+  document.getElementById('success-overlay').classList.add('show');
+
+  try {
+    const body = {
+      tier,
+      ...(repoUrl  ? { repo_url:  repoUrl  } : {}),
+      ...(repoPath ? { repo_path: repoPath } : {}),
+    };
+    const r = await fetch('/analyze', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        Accept:'application/json',
+        Authorization:`L402 ${macaroon}:${preimage}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      alert('Analysis failed: ' + (d.error ?? d.message));
+      return;
+    }
+    const result = await r.json();
+    sessionStorage.setItem('df-graph', JSON.stringify(result.graph));
+    setTimeout(() => { window.location.href = '/view?from=session'; }, 2200);
+  } catch (err) {
+    alert('Network error: ' + err.message);
+  }
+}
+
+// ── Dev simulate ─────────────────────────────────────────────
+document.getElementById('btn-dev-pay').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-dev-pay');
+  btn.textContent = 'Paying…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/dev/pay', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ payment_hash: hash }),
+    });
+    const d = await r.json();
+    if (d.ok) await checkPayment();
+  } catch { btn.textContent = 'Error'; }
+});
+
+// ── Manual preimage ──────────────────────────────────────────
+document.getElementById('manual-toggle').addEventListener('click', () => {
+  document.getElementById('manual-input-wrap').classList.toggle('open');
+});
+document.getElementById('btn-manual-submit').addEventListener('click', () => {
+  const val = document.getElementById('preimage-input').value.trim();
+  if (val.length !== 64) { alert('Preimage must be 64 hex characters.'); return; }
+  onPaid(val);
+});
+</script>
+</body>
+</html>

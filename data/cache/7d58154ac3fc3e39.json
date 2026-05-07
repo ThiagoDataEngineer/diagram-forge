@@ -1,0 +1,421 @@
+{
+  "nodes": [
+    {
+      "id": "mediawiki_web",
+      "label": "Apache Web Server",
+      "type": "gateway",
+      "technology": "Apache HTTP Server (bookworm-apache2)",
+      "description": "Reverse proxy / web frontend that serves static assets and forwards PHP requests to PHP-FPM.",
+      "metadata": {
+        "port": "8080",
+        "docker_image": "docker-registry.wikimedia.org/dev/bookworm-apache2:1.0.1-s1",
+        "env": "MW_LOG_DIR"
+      }
+    },
+    {
+      "id": "mediawiki_app",
+      "label": "MediaWiki PHP-FPM App",
+      "type": "backend",
+      "technology": "PHP 8.3 / FPM",
+      "description": "Core MediaWiki application handling page rendering, Action API, REST API, and all business logic via a service container (MediaWikiServices).",
+      "metadata": {
+        "docker_image": "docker-registry.wikimedia.org/dev/bookworm-php83-fpm:1.0.0-s2",
+        "entry_points": [
+          "index.php",
+          "api.php",
+          "rest.php",
+          "load.php",
+          "img_auth.php",
+          "thumb.php"
+        ],
+        "xdebug": true,
+        "xhprof": true
+      }
+    },
+    {
+      "id": "action_api",
+      "label": "Action API (api.php)",
+      "type": "backend",
+      "technology": "PHP / MediaWiki ApiMain",
+      "description": "Legacy MediaWiki Action API endpoint handling structured queries via ApiBase subclasses.",
+      "metadata": {
+        "entry_point": "api.php",
+        "define": "MW_API"
+      }
+    },
+    {
+      "id": "rest_api",
+      "label": "REST API (rest.php)",
+      "type": "backend",
+      "technology": "PHP / MediaWiki REST EntryPoint",
+      "description": "Modern REST API endpoint for MediaWiki, handling versioned REST routes.",
+      "metadata": {
+        "entry_point": "rest.php",
+        "define": "MW_REST_API"
+      }
+    },
+    {
+      "id": "resource_loader",
+      "label": "ResourceLoader (load.php)",
+      "type": "backend",
+      "technology": "PHP / MediaWiki ResourceLoader",
+      "description": "Serves bundled and minified JavaScript/CSS modules to clients.",
+      "metadata": {
+        "entry_point": "load.php"
+      }
+    },
+    {
+      "id": "database",
+      "label": "Relational Database",
+      "type": "database",
+      "technology": "MySQL / MariaDB / PostgreSQL / SQLite",
+      "description": "Primary persistent storage for wiki pages, users, revisions, and metadata. Supports multiple backends via Wikimedia RDBMS (LBFactory).",
+      "metadata": {
+        "default_docker": "SQLite (MW_DBTYPE=sqlite, MW_DBPATH=/var/www/html/w/cache/sqlite)",
+        "supported_types": [
+          "mysql",
+          "postgres",
+          "sqlite"
+        ],
+        "load_balancer": "LBFactorySimple / LBFactoryMulti / LBFactorySingle"
+      }
+    },
+    {
+      "id": "object_cache",
+      "label": "Object Cache",
+      "type": "cache",
+      "technology": "Memcached / Redis / APCu / SQLite (BagOStuff)",
+      "description": "Pluggable key-value object cache (BagOStuff / WANObjectCache) supporting Memcached, Redis, APCu, or DB-backed stores for page/session/parser caches.",
+      "metadata": {
+        "implementations": [
+          "memcached-php",
+          "memcached-pecl",
+          "redis",
+          "apcu",
+          "db",
+          "hash"
+        ],
+        "config_key": "MainCacheType / MemCachedServers"
+      }
+    },
+    {
+      "id": "job_queue",
+      "label": "Job Queue",
+      "type": "queue",
+      "technology": "PHP / MediaWiki JobQueue (DB or Redis backed)",
+      "description": "Asynchronous job queue for deferred tasks such as link updates, email notifications, and purges.",
+      "metadata": {
+        "backends": [
+          "database",
+          "redis"
+        ],
+        "runner": "maintenance/runJobs.php"
+      }
+    },
+    {
+      "id": "file_storage",
+      "label": "File / Image Storage",
+      "type": "storage",
+      "technology": "PHP / MediaWiki FileBackend / FileRepo",
+      "description": "Stores uploaded media files and generated thumbnails via a pluggable FileBackend (local FS, Swift, S3-compatible).",
+      "metadata": {
+        "entry_points": [
+          "img_auth.php",
+          "thumb.php",
+          "thumb_handler.php"
+        ],
+        "images_dir": "./images"
+      }
+    },
+    {
+      "id": "mail",
+      "label": "Email / SMTP",
+      "type": "external_api",
+      "technology": "PEAR Mail / SMTP",
+      "description": "Sends outgoing email for notifications, password resets, and watchlist alerts via PEAR Mail / Net_SMTP.",
+      "metadata": {
+        "composer_packages": [
+          "pear/mail",
+          "pear/mail_mime",
+          "pear/net_smtp"
+        ]
+      }
+    },
+    {
+      "id": "statsd",
+      "label": "StatsD / Metrics",
+      "type": "monitoring",
+      "technology": "StatsD (liuggio/statsd-php-client) / Wikimedia StatsFactory",
+      "description": "Emits application performance metrics and counters to a StatsD-compatible endpoint.",
+      "metadata": {
+        "composer_package": "liuggio/statsd-php-client"
+      }
+    },
+    {
+      "id": "external_http",
+      "label": "External HTTP Services",
+      "type": "external_api",
+      "technology": "GuzzleHTTP 7",
+      "description": "Outbound HTTP calls to remote APIs, interwiki endpoints, and media services via GuzzleHttp client.",
+      "metadata": {
+        "composer_package": "guzzlehttp/guzzle:7.10.0"
+      }
+    },
+    {
+      "id": "browser_client",
+      "label": "Browser / Client",
+      "type": "frontend",
+      "technology": "JavaScript (Vue 3, OOjs UI, Wikimedia Codex)",
+      "description": "Web browser rendering wiki pages, loading JS/CSS via ResourceLoader, and interacting with Action/REST APIs.",
+      "metadata": {
+        "frameworks": [
+          "Vue 3",
+          "OOjs UI",
+          "Wikimedia Codex 2.5.1"
+        ],
+        "testing": [
+          "Jest",
+          "QUnit",
+          "WebdriverIO"
+        ]
+      }
+    },
+    {
+      "id": "maintenance_cli",
+      "label": "Maintenance CLI",
+      "type": "worker",
+      "technology": "PHP CLI / MediaWiki Maintenance",
+      "description": "Command-line maintenance scripts for database updates, job processing, cache warming, and administrative tasks.",
+      "metadata": {
+        "directory": "maintenance/",
+        "key_scripts": [
+          "update.php",
+          "runJobs.php",
+          "install.php"
+        ]
+      }
+    },
+    {
+      "id": "extensions",
+      "label": "Extensions & Skins",
+      "type": "other",
+      "technology": "PHP / MediaWiki Extension API",
+      "description": "Pluggable extensions and skins that hook into MediaWiki via the HookContainer and service wiring.",
+      "metadata": {
+        "directories": [
+          "extensions/",
+          "skins/"
+        ],
+        "schema": "docs/extension.schema.v2.json"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "async": false,
+      "from": "browser_client",
+      "to": "mediawiki_web",
+      "protocol": "HTTP",
+      "direction": "bidirectional",
+      "label": "HTTP page requests / responses"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_web",
+      "to": "mediawiki_app",
+      "protocol": "TCP",
+      "direction": "bidirectional",
+      "label": "FastCGI / PHP-FPM proxy"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "action_api",
+      "protocol": "HTTP",
+      "direction": "unidirectional",
+      "label": "Dispatches Action API requests (api.php)"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "rest_api",
+      "protocol": "HTTP",
+      "direction": "unidirectional",
+      "label": "Dispatches REST API requests (rest.php)"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "resource_loader",
+      "protocol": "HTTP",
+      "direction": "unidirectional",
+      "label": "Serves JS/CSS modules (load.php)"
+    },
+    {
+      "async": true,
+      "from": "browser_client",
+      "to": "action_api",
+      "protocol": "HTTP",
+      "direction": "bidirectional",
+      "label": "Action API calls (JSON/XML)"
+    },
+    {
+      "async": true,
+      "from": "browser_client",
+      "to": "rest_api",
+      "protocol": "HTTP",
+      "direction": "bidirectional",
+      "label": "REST API calls (JSON)"
+    },
+    {
+      "async": false,
+      "from": "browser_client",
+      "to": "resource_loader",
+      "protocol": "HTTP",
+      "direction": "unidirectional",
+      "label": "Loads bundled JS/CSS modules"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "database",
+      "protocol": "SQL",
+      "direction": "bidirectional",
+      "label": "Page, revision, user, and metadata queries (LBFactory)"
+    },
+    {
+      "async": false,
+      "from": "action_api",
+      "to": "database",
+      "protocol": "SQL",
+      "direction": "bidirectional",
+      "label": "API query reads/writes"
+    },
+    {
+      "async": false,
+      "from": "rest_api",
+      "to": "database",
+      "protocol": "SQL",
+      "direction": "bidirectional",
+      "label": "REST resource reads/writes"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "object_cache",
+      "protocol": "TCP",
+      "direction": "bidirectional",
+      "label": "Parser cache, session cache, WAN cache (BagOStuff / WANObjectCache)"
+    },
+    {
+      "async": true,
+      "from": "mediawiki_app",
+      "to": "job_queue",
+      "protocol": "Unknown",
+      "direction": "bidirectional",
+      "label": "Enqueue / dequeue deferred jobs"
+    },
+    {
+      "async": true,
+      "from": "job_queue",
+      "to": "database",
+      "protocol": "SQL",
+      "direction": "bidirectional",
+      "label": "Job persistence (DB-backed queue)"
+    },
+    {
+      "async": true,
+      "from": "maintenance_cli",
+      "to": "job_queue",
+      "protocol": "Unknown",
+      "direction": "bidirectional",
+      "label": "runJobs.php processes queued jobs"
+    },
+    {
+      "async": false,
+      "from": "maintenance_cli",
+      "to": "database",
+      "protocol": "SQL",
+      "direction": "bidirectional",
+      "label": "Schema updates, data migrations"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "file_storage",
+      "protocol": "Unknown",
+      "direction": "bidirectional",
+      "label": "Upload, read, and thumbnail media files (FileBackend)"
+    },
+    {
+      "async": true,
+      "from": "mediawiki_app",
+      "to": "mail",
+      "protocol": "TCP",
+      "direction": "unidirectional",
+      "label": "Send notification / password-reset emails (SMTP)"
+    },
+    {
+      "async": true,
+      "from": "mediawiki_app",
+      "to": "statsd",
+      "protocol": "UDP",
+      "direction": "unidirectional",
+      "label": "Emit performance counters and metrics"
+    },
+    {
+      "async": false,
+      "from": "mediawiki_app",
+      "to": "external_http",
+      "protocol": "HTTPS",
+      "direction": "bidirectional",
+      "label": "Outbound calls to interwiki / remote APIs (GuzzleHTTP)"
+    },
+    {
+      "async": false,
+      "from": "extensions",
+      "to": "mediawiki_app",
+      "protocol": "Unknown",
+      "direction": "bidirectional",
+      "label": "Hook callbacks, service overrides, special pages"
+    }
+  ],
+  "summary": "MediaWiki is a monolithic PHP 8.3 wiki application served via Apache HTTP Server (reverse proxy) → PHP-FPM, exposing three HTTP entry points: the classic page-rendering frontend (index.php), the Action API (api.php), and a modern REST API (rest.php). All tiers share a pluggable persistence layer composed of a relational database (MySQL/MariaDB/PostgreSQL/SQLite via Wikimedia RDBMS), a key-value object cache (Memcached, Redis, or APCu via BagOStuff/WANObjectCache), a DB- or Redis-backed asynchronous job queue, and a pluggable FileBackend for media storage. Supporting services include SMTP email delivery (PEAR Mail), StatsD metrics emission, outbound HTTP via GuzzleHTTP, and a CLI maintenance subsystem; the entire application is extensible through a HookContainer-based extension/skin API.",
+  "tech_stack": [
+    "PHP 8.3",
+    "PHP-FPM",
+    "Apache HTTP Server",
+    "MediaWiki Core",
+    "Wikimedia RDBMS (LBFactory)",
+    "MySQL / MariaDB",
+    "PostgreSQL",
+    "SQLite",
+    "Memcached",
+    "Redis",
+    "APCu",
+    "BagOStuff / WANObjectCache",
+    "GuzzleHTTP 7",
+    "Monolog 2",
+    "PEAR Mail / Net_SMTP",
+    "StatsD (liuggio/statsd-php-client)",
+    "Wikimedia StatsFactory",
+    "lcobucci/jwt",
+    "OOjs UI 0.53.2",
+    "Vue 3",
+    "Wikimedia Codex 2.5.1",
+    "ResourceLoader",
+    "JavaScript (ES modules)",
+    "Grunt",
+    "Jest 29",
+    "QUnit",
+    "WebdriverIO 9",
+    "Docker / Docker Compose",
+    "Composer",
+    "npm"
+  ],
+  "confidence": 0.82,
+  "analysis_steps": 8,
+  "_cached_at": "2026-05-06T14:49:45.635Z",
+  "_sha": "42c40f6f531c6ae1244384025930fbd52d60b5d9",
+  "_identifier": "C:\\tmp\\mediawiki"
+}

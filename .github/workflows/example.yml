@@ -1,0 +1,38 @@
+name: Architecture Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  diagram-forge:
+    name: Diagram Forge
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # needed to post PR comment
+      contents: read
+
+    steps:
+      - name: Analyze architecture
+        uses: shinydapps/diagram-forge@v1
+        with:
+          # URL of your Diagram Forge server (self-hosted or diagram-forge.dev)
+          diagram_forge_url: https://diagram-forge.dev
+
+          # Analysis tier: basic (100 sats) | full (500 sats) | live (1000 sats)
+          tier: full
+
+          # Optional: pre-paid L402 token stored as a repo secret
+          # l402_token: ${{ secrets.DIAGRAM_FORGE_TOKEN }}
+
+          # Optional: Lightning Address to auto-pay invoices
+          # lightning_address: ${{ secrets.LIGHTNING_ADDRESS }}
+
+          # GitHub token for posting PR comments (default: automatically provided)
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show grade
+        run: |
+          echo "Grade: ${{ steps.analyze.outputs.grade }}"
+          echo "Score: ${{ steps.analyze.outputs.overall_score }}"
+          echo "Diagram: ${{ steps.analyze.outputs.share_url }}"

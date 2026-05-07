@@ -1,0 +1,37 @@
+# ── Credenciais — NUNCA commitar ──────────────────────────
+.env
+.env.*
+!.env.example
+CREDENTIALS.deploy.md
+CREDENTIALS.owner.md
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Build ──────────────────────────────────────────────────
+dist/
+node_modules/
+
+# ── Dados gerados ──────────────────────────────────────────
+data/graphs/
+*-graph.json
+*.svg
+
+# ── Repos clonados temporários ────────────────────────────
+/tmp/
+
+# ── OS & Editor ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.log
+
+# Claude local settings
+.claude/settings.local.json
+response.json
+
+# VSCode extension build output
+vscode-extension/out/
+vscode-extension/node_modules/
+.claude/

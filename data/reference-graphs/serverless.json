@@ -1,0 +1,35 @@
+{
+  "_reference": {
+    "name": "Serverless",
+    "description": "Fully managed, event-driven serverless architecture using Lambda functions, managed database, SQS queue, S3 storage, CloudFront CDN, and CloudWatch monitoring. Zero servers to manage."
+  },
+  "nodes": [
+    { "id": "cdn",       "label": "CDN",              "type": "cdn",        "technology": "CloudFront",  "description": "Global static asset delivery" },
+    { "id": "gateway",   "label": "API Gateway",      "type": "gateway",    "technology": "AWS API GW",  "description": "HTTP trigger for Lambda functions" },
+    { "id": "auth_fn",   "label": "Auth Lambda",      "type": "auth",       "technology": "AWS Lambda",  "description": "JWT verification authorizer" },
+    { "id": "api_fn",    "label": "API Lambda",       "type": "backend",    "technology": "AWS Lambda",  "description": "Core business logic handler" },
+    { "id": "process_fn","label": "Processor Lambda", "type": "worker",     "technology": "AWS Lambda",  "description": "Async SQS event processor" },
+    { "id": "notify_fn", "label": "Notifier Lambda",  "type": "worker",     "technology": "AWS Lambda",  "description": "Email/SMS dispatcher" },
+    { "id": "db",        "label": "Managed Database", "type": "database",   "technology": "DynamoDB",    "description": "Serverless NoSQL datastore" },
+    { "id": "queue",     "label": "Queue",            "type": "queue",      "technology": "SQS",         "description": "Decouples API from processing" },
+    { "id": "storage",   "label": "Object Storage",   "type": "storage",    "technology": "S3",          "description": "File and artifact storage" },
+    { "id": "monitor",   "label": "Monitoring",       "type": "monitoring", "technology": "CloudWatch",  "description": "Lambda logs, metrics, alarms" }
+  ],
+  "edges": [
+    { "from": "cdn",       "to": "gateway",   "protocol": "HTTPS", "direction": "unidirectional", "async": false },
+    { "from": "gateway",   "to": "auth_fn",   "protocol": "HTTP",  "direction": "unidirectional", "async": false, "label": "authorizer" },
+    { "from": "gateway",   "to": "api_fn",    "protocol": "HTTP",  "direction": "unidirectional", "async": false },
+    { "from": "api_fn",    "to": "db",        "protocol": "HTTPS", "direction": "bidirectional",  "async": false },
+    { "from": "api_fn",    "to": "queue",     "protocol": "HTTPS", "direction": "unidirectional", "async": true,  "label": "enqueue job" },
+    { "from": "api_fn",    "to": "storage",   "protocol": "HTTPS", "direction": "unidirectional", "async": false, "label": "upload file" },
+    { "from": "queue",     "to": "process_fn","protocol": "HTTPS", "direction": "unidirectional", "async": true,  "label": "trigger" },
+    { "from": "process_fn","to": "notify_fn", "protocol": "HTTPS", "direction": "unidirectional", "async": true,  "label": "invoke" },
+    { "from": "api_fn",    "to": "monitor",   "protocol": "HTTPS", "direction": "unidirectional", "async": true,  "label": "logs/metrics" },
+    { "from": "process_fn","to": "monitor",   "protocol": "HTTPS", "direction": "unidirectional", "async": true },
+    { "from": "notify_fn", "to": "monitor",   "protocol": "HTTPS", "direction": "unidirectional", "async": true },
+    { "from": "auth_fn",   "to": "monitor",   "protocol": "HTTPS", "direction": "unidirectional", "async": true }
+  ],
+  "confidence": 0.95,
+  "tech_stack": ["AWS Lambda", "AWS API Gateway", "DynamoDB", "SQS", "S3", "CloudFront", "CloudWatch"],
+  "summary": "Fully serverless architecture on AWS — pay-per-invocation, auto-scaling, zero infrastructure management."
+}

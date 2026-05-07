@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "diagram-forge": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp/server.ts"],
+      "cwd": "C:/Users/thiag/Diagram Forge",
+      "env": {
+        "ANTHROPIC_API_KEY": "sua-chave-aqui"
+      }
+    }
+  }
+}

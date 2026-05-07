@@ -1,0 +1,51 @@
+name: "Diagram Forge — Architecture Analysis"
+description: "Generates living architecture diagrams from your repo and posts a benchmark + diff on every PR"
+author: "ShinyDapps"
+
+branding:
+  icon: "layers"
+  color: "purple"
+
+inputs:
+  diagram_forge_url:
+    description: "URL of your Diagram Forge instance"
+    required: false
+    default: "https://diagram-forge.dev"
+  l402_token:
+    description: "Pre-paid L402 token (macaroon:preimage). Leave empty to auto-pay via LNURL."
+    required: false
+    default: ""
+  lightning_address:
+    description: "Lightning Address for auto-paying invoices (e.g. you@wallet.com)"
+    required: false
+    default: ""
+  tier:
+    description: "Analysis tier: basic (100 sats) | full (500 sats) | live (1000 sats)"
+    required: false
+    default: "full"
+  github_token:
+    description: "GitHub token for posting PR comments"
+    required: false
+    default: ${{ github.token }}
+  base_ref:
+    description: "Base branch ref to compare against (defaults to PR base)"
+    required: false
+    default: ""
+  post_comment:
+    description: "Whether to post a PR comment with results (true/false)"
+    required: false
+    default: "true"
+
+outputs:
+  graph_json:
+    description: "Full architecture graph as JSON"
+  share_url:
+    description: "Short share URL for the generated diagram"
+  overall_score:
+    description: "Overall benchmark score (0–100)"
+  grade:
+    description: "Architecture grade: A, B, C, D or F"
+
+runs:
+  using: "node20"
+  main: "dist/index.js"

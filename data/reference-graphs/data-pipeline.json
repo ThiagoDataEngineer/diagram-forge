@@ -1,0 +1,35 @@
+{
+  "_reference": {
+    "name": "Data Pipeline",
+    "description": "Batch and streaming data pipeline architecture with an ingestion API, message queue, parallel processing workers, a data warehouse for analytics, an ML model for predictions, result caching, monitoring, and a BI dashboard."
+  },
+  "nodes": [
+    { "id": "ingest",    "label": "Ingestion API",    "type": "backend",    "technology": "FastAPI",           "description": "Accepts raw data via HTTP and validates schema" },
+    { "id": "queue",     "label": "Event Queue",      "type": "queue",      "technology": "Apache Kafka",       "description": "Durable log for raw events; partitioned by source" },
+    { "id": "etl",       "label": "ETL Worker",       "type": "worker",     "technology": "Apache Spark",       "description": "Extract-transform-load from raw to clean layer" },
+    { "id": "enrich",    "label": "Enrichment Worker","type": "worker",     "technology": "Python/Flink",       "description": "Joins external data sources, computes features" },
+    { "id": "loader",    "label": "Loader Worker",    "type": "worker",     "technology": "Python",             "description": "Writes clean data to warehouse in batches" },
+    { "id": "warehouse", "label": "Data Warehouse",   "type": "database",   "technology": "BigQuery/Snowflake", "description": "Columnar store for analytical queries" },
+    { "id": "ml",        "label": "ML Model",         "type": "ml_model",   "technology": "TensorFlow Serving", "description": "Serves inference predictions on enriched features" },
+    { "id": "cache",     "label": "Result Cache",     "type": "cache",      "technology": "Redis",              "description": "Caches recent ML predictions and report fragments" },
+    { "id": "monitor",   "label": "Monitoring",       "type": "monitoring", "technology": "Prometheus/Grafana", "description": "Pipeline lag, throughput, and data quality metrics" },
+    { "id": "dashboard", "label": "BI Dashboard",     "type": "frontend",   "technology": "Metabase",           "description": "Self-serve analytics dashboards for stakeholders" }
+  ],
+  "edges": [
+    { "from": "ingest",    "to": "queue",     "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "publish raw event" },
+    { "from": "queue",     "to": "etl",       "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "consume" },
+    { "from": "queue",     "to": "enrich",    "protocol": "AMQP",  "direction": "unidirectional", "async": true,  "label": "consume" },
+    { "from": "etl",       "to": "loader",    "protocol": "HTTP",  "direction": "unidirectional", "async": true,  "label": "clean batch" },
+    { "from": "enrich",    "to": "ml",        "protocol": "HTTP",  "direction": "unidirectional", "async": false, "label": "feature vector" },
+    { "from": "loader",    "to": "warehouse", "protocol": "HTTP",  "direction": "unidirectional", "async": false, "label": "bulk insert" },
+    { "from": "ml",        "to": "cache",     "protocol": "Redis", "direction": "unidirectional", "async": false, "label": "cache prediction" },
+    { "from": "warehouse", "to": "dashboard", "protocol": "SQL",   "direction": "unidirectional", "async": false },
+    { "from": "cache",     "to": "dashboard", "protocol": "Redis", "direction": "unidirectional", "async": false },
+    { "from": "ingest",    "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true },
+    { "from": "queue",     "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true,  "label": "consumer lag" },
+    { "from": "etl",       "to": "monitor",   "protocol": "HTTP",  "direction": "unidirectional", "async": true }
+  ],
+  "confidence": 0.95,
+  "tech_stack": ["FastAPI", "Kafka", "Spark", "Flink", "Python", "BigQuery", "TensorFlow Serving", "Redis", "Prometheus", "Grafana", "Metabase"],
+  "summary": "End-to-end data pipeline from raw event ingestion through ETL and feature enrichment to ML inference, warehousing, and stakeholder dashboards."
+}

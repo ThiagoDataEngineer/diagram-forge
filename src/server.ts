@@ -674,10 +674,10 @@ app.get("/api/graph", (req, res) => {
   }
 });
 
-// 4.2: Prometheus metrics endpoint
+// 4.2: Prometheus metrics endpoint — always requires token
 app.get("/metrics", async (req, res) => {
   const token = process.env.METRICS_TOKEN;
-  if (token && req.query.token !== token) {
+  if (!token || req.query.token !== token) {
     res.status(401).end();
     return;
   }

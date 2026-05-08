@@ -28,6 +28,7 @@ import { renderSVG } from "./diagram/svg.js";
 import { diffGraphs, diffToMarkdown } from "./analyzer/diff.js";
 import { benchmarkGraph, benchmarkToMarkdown } from "./analyzer/benchmark.js";
 import type { ArchitectureGraph } from "./analyzer/agent.js";
+import { hasTrial, setTrial, getIdem, setIdemRunning, setIdemDone, deleteIdem, startStoreCleanup } from "./db/stores.js";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -97,37 +98,21 @@ type AuthedRequest = express.Request & {
   _prefetchedGraph?: unknown;
 };
 
-// ─── P-1: Trial store — one free basic analysis per IP ───────────────────────
-const trialStore = new Set<string>();
-
 // ─── P-3: Cache-bypass store — deduplicate SHA lookups across middlewares ─────
 // Nothing persisted here; the SHA is attached to the request object instead.
 
 // ─── In-memory invoice store (hash → preimage, for mock polling) ─────────────
-// In production this would be a DB or Redis.
+// Dev/mock only — production uses Lightning wallet for preimage delivery.
 const invoiceStore = new Map<string, { paid: boolean; preimage?: string }>();
 
 // ─── Stripe paid sessions (sessionId → tier) ──────────────────────────────────
 // Populated by the Stripe webhook; consumed once by /analyze.
 const stripeSessionStore = new Map<string, { tier: "basic" | "full" | "live" }>();
 
-// ─── 3.3: Idempotency store ───────────────────────────────────────────────────
-// Prevents duplicate analyses from double-clicks or retried requests.
-// Key: `${Idempotency-Key}:${payment_hash}` — cross-user safe.
-type IdemEntry = { status: "running"; startedAt: number } | { status: "done"; result: unknown };
-const idemStore = new Map<string, { entry: IdemEntry; expiresAt: number }>();
-const IDEM_TTL_MS    = 2 * 60 * 60 * 1000;  // 2h for completed results
-const IDEM_RUNNING_TIMEOUT_MS = 10 * 60 * 1000; // 10 min max for "running" — allows retry if server crashed
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of idemStore) {
-    if (v.expiresAt < now) { idemStore.delete(k); continue; }
-    // Expire stale "running" entries so crashed analyses can be retried
-    if (v.entry.status === "running" && now - v.entry.startedAt > IDEM_RUNNING_TIMEOUT_MS) {
-      idemStore.delete(k);
-    }
-  }
-}, 60_000).unref();
+const IDEM_TTL_MS = 2 * 60 * 60 * 1000; // 2h for completed results
+
+// Start persistent store cleanup (preimage_claims + idem_store expiry)
+startStoreCleanup();
 
 // ─── 3.1: Zod schema for /analyze request body ───────────────────────────────
 const AnalyzeBodySchema = z.object({
@@ -160,7 +145,7 @@ app.get("/health", (_req, res) => {
     tiers: PRICE_SATS,
     lightning_backend: backend,
     uptime_s: Math.floor(process.uptime()),
-    idem_store_size: idemStore.size,
+    idem_store: "supabase",
   });
 });
 
@@ -273,20 +258,21 @@ app.post(
     next();
   },
   // ── P-1: Free trial — one basic analysis per IP (first-time users) ──────────
-  (req: AuthedRequest, _res, next) => {
+  async (req: AuthedRequest, _res, next) => {
     if (req.l402) return next(); // already authed
     const tier = (req.body?.tier as "basic" | "full" | "live") ?? "basic";
     if (tier !== "basic") return next(); // trial only on basic
     const ip = req.ip ?? "unknown";
-    if (!trialStore.has(ip)) {
-      trialStore.add(ip);
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    if (!(await hasTrial(ipHash))) {
+      await setTrial(ipHash);
       req.l402 = {
-        payment_hash: `trial_${ip}_${crypto.randomBytes(4).toString("hex")}`,
+        payment_hash: `trial_${ipHash.slice(0, 16)}_${crypto.randomBytes(4).toString("hex")}`,
         expires_at:   Math.floor(Date.now() / 1000) + 3600,
         tier:         "basic",
         sats:         0,
       };
-      log.info({ ip }, "free trial granted");
+      log.info({ ip_hash: ipHash.slice(0, 12) }, "free trial granted");
       track("trial_granted", { tier: "basic", ip });
     }
     next();
@@ -342,18 +328,18 @@ app.post(
     const paymentHash = (req as AuthedRequest).l402?.payment_hash ?? "";
     const idemStoreKey = idemKey ? `${idemKey}:${paymentHash}` : null;
     if (idemStoreKey) {
-      const existing = idemStore.get(idemStoreKey);
+      const existing = await getIdem(idemStoreKey);
       if (existing) {
-        if (existing.entry.status === "running") {
+        if (existing.status === "running") {
           res.status(409).json({ error: "duplicate_request", message: "Analysis already in progress for this idempotency key." });
           return;
         }
-        if (existing.entry.status === "done") {
-          res.json(existing.entry.result);
+        if (existing.status === "done") {
+          res.json(existing.result);
           return;
         }
       }
-      idemStore.set(idemStoreKey, { entry: { status: "running", startedAt: Date.now() }, expiresAt: Date.now() + IDEM_TTL_MS });
+      await setIdemRunning(idemStoreKey, Date.now() + IDEM_TTL_MS);
     }
 
     let cloneCleanup: (() => void) | null = null;
@@ -367,7 +353,7 @@ app.post(
       // P-3: if cache-bypass middleware already found the cached graph, return immediately
       if (req._prefetchedGraph) {
         const result = { ok: true, tier, graph: req._prefetchedGraph, paid_sats: 0, cached: true };
-        if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
+        if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
         timer({ status: "cached" });
         analyzeRequests.inc({ status: "cached", tier });
         res.json(result);
@@ -385,7 +371,7 @@ app.post(
         if (cached) {
           log.info({ identifier, sha: sha.slice(0, 8) }, "cache hit");
           const result = { ok: true, tier, graph: cached, paid_sats: PRICE_SATS[tier], cached: true };
-          if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
+          if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
           timer({ status: "cached" });
           analyzeRequests.inc({ status: "cached", tier });
           res.json(result);
@@ -426,7 +412,7 @@ app.post(
         animated: tier === "live",
       };
       const result = { ok: true, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures };
-      if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
+      if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
       timer({ status: "success" });
       analyzeRequests.inc({ status: "success", tier });
       track("analyze_completed", { tier, ip: req.ip, repoUrl: repo_url, meta: { nodes: graph.nodes.length, edges: graph.edges.length } });
@@ -436,7 +422,7 @@ app.post(
       timer({ status: "error" });
       analyzeRequests.inc({ status: "error", tier });
       track("analyze_error", { tier, ip: req.ip, repoUrl: repo_url });
-      if (idemStoreKey) idemStore.delete(idemStoreKey); // allow retry on error
+      if (idemStoreKey) await deleteIdem(idemStoreKey); // allow retry on error
       res.status(500).json({
         error: "analysis_failed",
         message: err instanceof Error ? err.message : String(err),

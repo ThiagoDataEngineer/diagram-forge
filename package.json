@@ -1,6 +1,6 @@
 {
   "name": "diagram-forge",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "AI-powered living architecture diagram generator — paid via Lightning L402",
   "main": "dist/cli.js",
   "bin": {

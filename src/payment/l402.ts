@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import type { LightningBackend } from "./lightning.js";
+import { claimPreimage } from "../db/stores.js";
 
 // ─── L402 Protocol ────────────────────────────────────────────────────────────
 // Spec: https://github.com/lightninglabs/L402
@@ -20,19 +21,6 @@ import type { LightningBackend } from "./lightning.js";
 //   final    = base64url(payload + "." + sig)
 
 const MACAROON_SECRET = process.env.MACAROON_SECRET ?? crypto.randomBytes(32).toString("hex");
-
-// ─── 3.4: Preimage replay-attack lock ────────────────────────────────────────
-// Prevents two parallel requests from using the same preimage simultaneously.
-// TTL matches macaroon expiry; expired entries are pruned on each claim.
-const usedPreimages = new Map<string, number>(); // payment_hash → expiry ms
-
-function tryClaim(paymentHash: string, expiresAt: number): boolean {
-  const now = Date.now();
-  for (const [k, exp] of usedPreimages) if (exp < now) usedPreimages.delete(k);
-  if (usedPreimages.has(paymentHash)) return false;
-  usedPreimages.set(paymentHash, expiresAt * 1000); // expiresAt is Unix seconds
-  return true;
-}
 
 export interface MacaroonPayload {
   payment_hash: string;
@@ -152,8 +140,8 @@ export function l402(options: L402Options) {
         return;
       }
 
-      // 3.4: Prevent parallel requests from reusing the same preimage
-      if (!tryClaim(payload.payment_hash, payload.expires_at)) {
+      // 3.4: Prevent parallel requests from reusing the same preimage (persistent)
+      if (!(await claimPreimage(payload.payment_hash, payload.expires_at))) {
         res.status(401).json({
           error: "preimage_already_used",
           message: "This payment proof has already been used. Request a new invoice.",

@@ -893,15 +893,36 @@
       <button class="tb-btn" id="btn-record" style="width:100%;justify-content:flex-start;gap:8px">
         <span>⏺</span> Record video
       </button>
-      <div style="height:1px;background:var(--border);margin:4px 0"></div>
-      <button class="tb-btn" id="btn-diff" style="width:100%;justify-content:flex-start;gap:8px" title="Compare current graph with a JSON or image file">
-        <span>🔀</span> Compare / Diff
-      </button>
-      <button class="tb-btn" id="btn-benchmark" style="width:100%;justify-content:flex-start;gap:8px">
-        <span>🏆</span> Benchmark
-      </button>
     </div>
   </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Benchmark — top-level -->
+  <button class="tb-btn" id="btn-benchmark" title="Architecture benchmark — 6-dimension quality score">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+    </svg>
+    Benchmark
+  </button>
+
+  <!-- Diff — top-level -->
+  <button class="tb-btn" id="btn-diff" title="Compare with a previous snapshot">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-4"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="13" r="2"/>
+    </svg>
+    Diff
+  </button>
+
+  <!-- Save snapshot -->
+  <button class="tb-btn" id="btn-save-snapshot" title="Save current diagram as diff baseline">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+    </svg>
+    Snapshot
+  </button>
+
+  <div class="tb-sep"></div>
 
   <!-- Import from image -->
   <button class="tb-btn" id="btn-import-image" title="Import from diagram image">
@@ -2857,6 +2878,16 @@ let _diffData = null;
 
 function openDiffPicker() {
   closeExportMenu();
+  if (!graph) { showToast('Load a diagram first'); return; }
+  // Use saved snapshot from localStorage if available — no file picker needed
+  const snap = localStorage.getItem('df-snapshot');
+  if (snap) {
+    try {
+      const oldGraph = JSON.parse(snap);
+      processDiff(oldGraph);
+      return;
+    } catch { /* fall through to file picker */ }
+  }
   document.getElementById('diff-file-input').value = '';
   document.getElementById('diff-file-input').click();
 }
@@ -4205,7 +4236,9 @@ document.getElementById('benchmark-export-md').addEventListener('click', async (
   }
 });
 
-init().catch(err => {
+init().then(() => {
+  window.dispatchEvent(new CustomEvent('diagramReady'));
+}).catch(err => {
   const el = document.getElementById('loading');
   if (el) el.innerHTML = `<div style="color:#EF4444;font-size:13px;padding:20px;max-width:400px;text-align:center">
     <div style="font-size:24px;margin-bottom:8px">⚠️</div>
@@ -4215,16 +4248,36 @@ init().catch(err => {
   console.error('[diagram-forge] init() error:', err);
 });
 
-// Handle #benchmark and #diff URL hash from VS Code extension
+// ── Save snapshot ─────────────────────────────────────────────────────────────
+document.getElementById('btn-save-snapshot').addEventListener('click', () => {
+  if (!graph) { showToast('Load a diagram first'); return; }
+  localStorage.setItem('df-snapshot', JSON.stringify(graph));
+  const btn = document.getElementById('btn-save-snapshot');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Saved!';
+  setTimeout(() => { btn.innerHTML = orig; }, 1800);
+});
+
+// Restore snapshot badge on load
+(function() {
+  const snap = localStorage.getItem('df-snapshot');
+  if (snap) {
+    const btn = document.getElementById('btn-save-snapshot');
+    btn.title = 'Snapshot saved — click Diff to compare, or click here to update';
+    btn.style.color = '#22C55E';
+  }
+})();
+
+// ── Hash → benchmark / diff (waits for diagramReady) ─────────────────────────
 (function() {
   const hash = window.location.hash;
-  if (hash === '#benchmark') {
-    window.location.hash = '';
-    setTimeout(() => { if (typeof runBenchmark === 'function') runBenchmark(); }, 800);
-  } else if (hash === '#diff') {
-    window.location.hash = '';
-    setTimeout(() => { if (typeof openDiffPicker === 'function') openDiffPicker(); }, 800);
+  if (!hash || (hash !== '#benchmark' && hash !== '#diff')) return;
+  window.location.hash = '';
+  function run() {
+    if (hash === '#benchmark' && typeof runBenchmark === 'function') runBenchmark();
+    else if (hash === '#diff' && typeof openDiffPicker === 'function') openDiffPicker();
   }
+  window.addEventListener('diagramReady', run, { once: true });
 })();
 </script>
 </body>

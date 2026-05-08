@@ -19,7 +19,7 @@ jobs:
           # URL of your Diagram Forge server (self-hosted or diagram-forge.dev)
           diagram_forge_url: https://diagram-forge.dev
 
-          # Analysis tier: basic (100 sats) | full (500 sats) | live (1000 sats)
+          # Analysis tier: basic (2000 sats) | full (10000 sats) | live (25000 sats)
           tier: full
 
           # Optional: pre-paid L402 token stored as a repo secret

@@ -32,6 +32,8 @@ import type { ArchitectureGraph } from "./analyzer/agent.js";
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 const app = express();
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
 app.use(express.json({ limit: "2mb" })); // default limit; analyze-image has its own middleware
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -1342,7 +1344,10 @@ window.close();
 
 app.get("/api/admin/stats", async (req, res) => {
   const secret = process.env.ADMIN_SECRET;
-  if (!secret || req.headers["x-admin-secret"] !== secret) {
+  const provided = String(req.headers["x-admin-secret"] ?? "");
+  const valid = !!secret && provided.length === secret.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
+  if (!valid) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
@@ -1427,6 +1432,11 @@ app.listen(PORT, () => {
 ║  💚 Health:   GET  /health                       ║
 ${DEV_PAY_ENABLED ? "║  🧪 Dev pay:  POST /dev/pay  (ENABLE_DEV_PAY=1)  ║\n" : ""}╚══════════════════════════════════════════════════╝
   `);
+});
+
+process.on("SIGTERM", () => {
+  log.info("SIGTERM received — shutting down gracefully");
+  process.exit(0);
 });
 
 export default app;

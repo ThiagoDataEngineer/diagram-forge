@@ -6,6 +6,7 @@
  * Cobre: 402 gate → mock pay → analyze → benchmark → diff → share → short link
  */
 import { describe, it, expect, beforeAll } from "vitest";
+import { PRICE_SATS } from "../payment/l402.js";
 
 const BASE = "http://localhost:3000";
 
@@ -54,7 +55,7 @@ describe("L402 gate", () => {
     expect(status).toBe(402);
     expect(body.payment_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(body.invoice).toMatch(/^lnbc_mock_/);
-    expect(body.amount_sats).toBe(100);
+    expect(body.amount_sats).toBe(PRICE_SATS.basic);
     expect(body.tier).toBe("basic");
     expect(body.expires_at).toBeGreaterThan(Date.now() / 1000);
   });
@@ -64,7 +65,7 @@ describe("L402 gate", () => {
       repo_url: "https://github.com/meltano/meltano",
       tier: "full",
     });
-    expect(body.amount_sats).toBe(500);
+    expect(body.amount_sats).toBe(PRICE_SATS.full);
   });
 });
 
@@ -127,7 +128,7 @@ describe("Fluxo completo /analyze (ETL — meltano/meltano)", () => {
       { repo_url: "https://github.com/meltano/meltano", tier: "full" },
       { Authorization: auth }
     );
-    expect(body.paid_sats).toBe(500);
+    expect(body.paid_sats).toBe(PRICE_SATS.full);
     expect(body.cached).toBe(true);
   }, 30_000);
 

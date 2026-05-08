@@ -98,14 +98,15 @@ export class MockLightningBackend implements LightningBackend {
 
     this.store.set(payment_hash, { preimage, paid: false });
 
-    // In mock mode, log the preimage so dev can simulate payment
-    console.log("\n" + "─".repeat(60));
-    console.log("⚡ MOCK LIGHTNING INVOICE CREATED");
-    console.log(`   Amount:       ${sats} sats`);
-    console.log(`   Memo:         ${memo}`);
-    console.log(`   Payment hash: ${payment_hash}`);
-    console.log(`   Preimage:     ${preimage}   ← use this to simulate payment`);
-    console.log("─".repeat(60) + "\n");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("\n" + "─".repeat(60));
+      console.log("⚡ MOCK LIGHTNING INVOICE CREATED");
+      console.log(`   Amount:       ${sats} sats`);
+      console.log(`   Memo:         ${memo}`);
+      console.log(`   Payment hash: ${payment_hash}`);
+      console.log(`   Preimage:     ${preimage}   ← use this to simulate payment`);
+      console.log("─".repeat(60) + "\n");
+    }
 
     return {
       payment_hash,
@@ -231,6 +232,7 @@ export class BlinkBackend implements LightningBackend {
 
 export function isProductionLightning(): boolean {
   return !!(
+    process.env.LIGHTNING_ADDRESS ||
     (process.env.BLINK_API_KEY && process.env.BLINK_WALLET_ID) ||
     (process.env.LNBITS_URL && process.env.LNBITS_API_KEY)
   );

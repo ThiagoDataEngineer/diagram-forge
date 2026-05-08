@@ -67,7 +67,7 @@ No account. No monthly subscription. Pay per analysis with a Lightning wallet.
 | **Export Everything** | SVG · PNG · JSON · Markdown · draw.io · Excalidraw |
 | **Record** | Built-in screen recorder → WebM → GIF for your README. |
 | **MCP Integration** | Use Diagram Forge as a tool inside Claude Desktop, Cursor, or any MCP-compatible AI. |
-| **Pay Per Use** | No subscription. 100 sats for a quick scan, 500 sats for a full repo. Under $1 at any BTC price. |
+| **Pay Per Use** | No subscription. 2,000 sats for a quick scan, 10,000 sats for a full repo. |
 
 ---
 
@@ -77,9 +77,9 @@ No account. No monthly subscription. Pay per analysis with a Lightning wallet.
 
 | Tier | Price | What you get |
 |------|-------|-------------|
-| **Basic** | 100 sats (~$0.10) | Quick scan — up to 10 key files, main services detected |
-| **Full** | 500 sats (~$0.50) | Complete repo analysis — all services, connections, monorepos, notebooks |
-| **Live** | 1000 sats (~$1.00) | Full analysis + animated SVG export with official logos |
+| **Basic** | 2,000 sats (~$2) | Quick scan — up to 10 key files, main services detected |
+| **Full** | 10,000 sats (~$10) | Complete repo analysis — all services, connections, monorepos, notebooks |
+| **Live** | 25,000 sats (~$25) | Full analysis + animated SVG export with official logos |
 
 Payment via **Lightning Network** (L402 protocol). Any wallet: Alby, Phoenix, Wallet of Satoshi, Muun.
 

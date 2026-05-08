@@ -2,6 +2,9 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { createRequire } from "module";
+const _require = createRequire(import.meta.url);
+const PKG_VERSION: string = (_require("../package.json") as { version: string }).version;
 import crypto from "crypto";
 import QRCode from "qrcode";
 import pinoHttp from "pino-http";
@@ -133,7 +136,7 @@ app.get("/health", (_req, res) => {
   res.status(200).json({
     status: ok ? "ok" : "degraded",
     service: "diagram-forge",
-    version: process.env.npm_package_version ?? "0.1.0",
+    version: PKG_VERSION,
     tiers: PRICE_SATS,
     lightning_backend: backend,
     uptime_s: Math.floor(process.uptime()),

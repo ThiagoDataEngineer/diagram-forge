@@ -237,7 +237,7 @@ app.post(
           tier,
           sats: 0,
         };
-        log.info({ code: code.toUpperCase(), tier }, "promo code redeemed");
+        log.info({ code_hash: crypto.createHash("sha256").update(code).digest("hex").slice(0, 12), tier }, "promo code redeemed");
         track("promo_redeemed", { tier, ip: req.ip });
       } else {
         // Return 402 with promo_error so the landing can show a specific message
@@ -486,11 +486,10 @@ app.post(
 // ─── GET /diagram/preview — render from saved graph file (dev shortcut) ───────
 
 app.get("/diagram/preview", (req, res) => {
-  const filePath = (req.query.file as string) ?? "graph.json";
-  const absPath  = path.resolve(filePath);
+  const absPath = resolveGraphFile((req.query.file as string) ?? "graph.json");
 
-  if (!fs.existsSync(absPath)) {
-    res.status(404).send(`File not found: ${absPath}`);
+  if (!absPath || !fs.existsSync(absPath)) {
+    res.status(404).send("File not found");
     return;
   }
 
@@ -531,9 +530,13 @@ app.get("/api/invoice-status/:hash", async (req, res) => {
   try {
     const paid = await lightning.checkPaid(hash);
     if (paid) {
-      // For mock backend: recover the preimage from store
-      const stored = invoiceStore.get(hash);
-      res.json({ paid: true, preimage: stored?.preimage ?? null });
+      // Return preimage only in dev/mock mode — in production the client's
+      // Lightning wallet holds the preimage; exposing it here would allow
+      // anyone who intercepted the payment_hash to steal the L402 credential.
+      const preimage = !isProductionLightning()
+        ? (invoiceStore.get(hash)?.preimage ?? null)
+        : null;
+      res.json({ paid: true, preimage });
     } else {
       res.json({ paid: false });
     }
@@ -661,8 +664,8 @@ app.get("/view", (req, res) => {
   let graph: ArchitectureGraph | null = null;
 
   if (req.query.file) {
-    const absPath = path.resolve(req.query.file as string);
-    if (fs.existsSync(absPath)) {
+    const absPath = resolveGraphFile(req.query.file as string);
+    if (absPath && fs.existsSync(absPath)) {
       try { graph = JSON.parse(fs.readFileSync(absPath, "utf-8")); } catch { /* use demo */ }
     }
   }
@@ -685,6 +688,10 @@ app.get("/view", (req, res) => {
 // Designed for CI/CD pipelines and MCP agents.
 
 app.get("/api/diff", (req, res) => {
+  if (isProductionLightning() && !diffAllowed(req.ip ?? "")) {
+    res.status(429).json({ error: "rate_limited", message: "Too many requests. Try again tomorrow." });
+    return;
+  }
   const fileA  = req.query.a      as string | undefined;
   const fileB  = req.query.b      as string | undefined;
   const format = (req.query.format as string | undefined) ?? "json";
@@ -727,6 +734,10 @@ app.get("/api/diff", (req, res) => {
 // POST /api/benchmark   body: { graph: ArchitectureGraph }[&format=json|markdown]
 
 app.get("/api/benchmark", (req, res) => {
+  if (isProductionLightning() && !benchmarkAllowed(req.ip ?? "")) {
+    res.status(429).json({ error: "rate_limited", message: "Too many requests. Try again tomorrow." });
+    return;
+  }
   const file   = req.query.file   as string | undefined;
   const format = (req.query.format as string | undefined) ?? "json";
 
@@ -746,7 +757,15 @@ app.get("/api/benchmark", (req, res) => {
     return;
   }
 
-  const costContext = req.query.cost ? JSON.parse(req.query.cost as string) : undefined;
+  let costContext: Record<string, number> | undefined;
+  if (req.query.cost) {
+    try {
+      const parsed = JSON.parse(req.query.cost as string);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        costContext = parsed as Record<string, number>;
+      }
+    } catch { /* ignore malformed cost param */ }
+  }
   const result = benchmarkGraph(graph, costContext);
 
   if (format === "markdown") {
@@ -805,7 +824,10 @@ app.get("/api/graph", (req, res) => {
 // 4.2: Prometheus metrics endpoint — always requires token
 app.get("/metrics", async (req, res) => {
   const token = process.env.METRICS_TOKEN;
-  if (!token || req.query.token !== token) {
+  const provided = String(req.query.token ?? "");
+  const validMetrics = !!token && provided.length === token.length &&
+    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(token));
+  if (!validMetrics) {
     res.status(401).end();
     return;
   }
@@ -825,6 +847,9 @@ import {
 
 const explainAllowed  = makeRateLimiter(7);   // 7 free explains/IP/day
 const analyzeAllowed  = makeRateLimiter(3);   // 3 free analyses/IP/day
+const diffAllowed     = makeRateLimiter(20);  // 20/IP/day — no payment but CPU-bounded
+const benchmarkAllowed = makeRateLimiter(20); // 20/IP/day
+const checkoutAllowed = makeRateLimiter(10);  // 10 Stripe checkout attempts/IP/day
 
 // ─── Explain node deeply ──────────────────────────────────────────────────────
 app.post("/api/explain", async (req, res) => {
@@ -1050,6 +1075,10 @@ app.post("/api/analyze-image", express.json({ limit: "12mb" }), async (req: Auth
 
 // POST /stripe/checkout — create Stripe Checkout Session
 app.post("/stripe/checkout", async (req, res) => {
+  if (isProductionLightning() && !checkoutAllowed(req.ip ?? "")) {
+    res.status(429).json({ error: "rate_limited", message: "Too many requests. Try again tomorrow." });
+    return;
+  }
   if (!isStripeAvailable()) {
     res.status(503).json({ error: "stripe_unavailable", message: "Stripe is not configured on this server." });
     return;

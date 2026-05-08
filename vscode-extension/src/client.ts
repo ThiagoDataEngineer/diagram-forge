@@ -79,6 +79,13 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   };
 }
 
+export async function checkPayment(paymentHash: string): Promise<{ paid: boolean; preimage: string | null }> {
+  const res = await fetch(`${SERVER}/api/invoice-status/${paymentHash}`);
+  if (!res.ok) return { paid: false, preimage: null };
+  const body = await res.json() as { paid?: boolean; preimage?: string };
+  return { paid: !!body.paid, preimage: body.preimage ?? null };
+}
+
 export async function share(graph: Graph): Promise<{ id: string; viewerUrl: string }> {
   const res = await fetch(`${SERVER}/api/share`, {
     method: "POST",

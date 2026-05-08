@@ -33,6 +33,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const state = this._state as { type: "paying"; challenge: L402Challenge };
         vscode.env.clipboard.writeText(state.challenge.invoice);
         vscode.window.showInformationMessage("⚡ Invoice copied — paste into your Lightning wallet");
+      } else if (msg.command === "openBenchmark") {
+        vscode.commands.executeCommand("diagramForge.openBenchmark");
+      } else if (msg.command === "openDiff") {
+        vscode.commands.executeCommand("diagramForge.openDiff");
       } else if (msg.command === "preimageChange") {
         const state = this._state as { type: "paying"; challenge: L402Challenge; preimage?: string };
         this.setState({ ...state, preimage: msg.payload as string });
@@ -248,25 +252,29 @@ function render() {
     const canSubmit = preimage.length === 64;
     root.innerHTML = \`
       <div class="card">
-        <div class="status-row"><div class="dot purple"></div><span>Payment required</span></div>
+        <div class="status-row"><div class="dot purple"></div><span>Waiting for payment…</span></div>
         <div class="amount-badge">⚡ \${c.amountSats} sats — \${c.tier}</div>
         <div class="label">Lightning invoice</div>
         <div class="invoice-box">\${c.invoice}</div>
-        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:12px">
+        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:10px">
           Copy Invoice
         </button>
-        <div class="label">Payment proof (preimage)</div>
-        <div class="hint" style="margin-bottom:6px">After paying, your wallet shows a payment proof. Paste the 64-character hex string below.</div>
-        <input
-          type="text" id="preimage-input"
-          placeholder="64-char hex preimage from your wallet"
-          value="\${preimage}"
-          oninput="onPreimageInput(this.value)"
-          style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:10px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;"
-        />
-        <button class="primary" \${canSubmit ? '' : 'disabled'} onclick="vscode.postMessage({command:'submitPreimage'})">
-          ⚡ Submit &amp; Generate Diagram
-        </button>
+        <div class="hint" style="margin-bottom:10px">Pay with any Lightning wallet — the diagram will start automatically once payment confirms.</div>
+        <details style="margin-top:4px">
+          <summary style="font-size:10px;color:var(--vscode-descriptionForeground);cursor:pointer;user-select:none">Paid but nothing happened? Enter preimage manually</summary>
+          <div style="margin-top:8px">
+            <input
+              type="text" id="preimage-input"
+              placeholder="64-char hex preimage"
+              value="\${preimage}"
+              oninput="onPreimageInput(this.value)"
+              style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:10px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;"
+            />
+            <button class="primary" \${canSubmit ? '' : 'disabled'} onclick="vscode.postMessage({command:'submitPreimage'})">
+              ⚡ Submit &amp; Generate Diagram
+            </button>
+          </div>
+        </details>
       </div>
     \`;
   }
@@ -292,7 +300,15 @@ function render() {
           Open Interactive Diagram ↗
         </button>
       </div>
-      <button class="secondary" onclick="vscode.postMessage({command:'analyze'})">Analyze another repo</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="secondary" onclick="vscode.postMessage({command:'openBenchmark'})" title="6-dimension quality score">
+          📊 Benchmark
+        </button>
+        <button class="secondary" onclick="vscode.postMessage({command:'openDiff'})" title="Compare with another snapshot">
+          🔀 Diff
+        </button>
+      </div>
+      <button class="secondary" style="margin-top:0" onclick="vscode.postMessage({command:'analyze'})">Analyze another repo</button>
     \`;
   }
 

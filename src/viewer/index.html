@@ -4214,6 +4214,18 @@ init().catch(err => {
   </div>`;
   console.error('[diagram-forge] init() error:', err);
 });
+
+// Handle #benchmark and #diff URL hash from VS Code extension
+(function() {
+  const hash = window.location.hash;
+  if (hash === '#benchmark') {
+    window.location.hash = '';
+    setTimeout(() => { if (typeof runBenchmark === 'function') runBenchmark(); }, 800);
+  } else if (hash === '#diff') {
+    window.location.hash = '';
+    setTimeout(() => { if (typeof openDiffPicker === 'function') openDiffPicker(); }, 800);
+  }
+})();
 </script>
 </body>
 </html>

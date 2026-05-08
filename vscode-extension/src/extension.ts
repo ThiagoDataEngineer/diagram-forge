@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as crypto from "crypto";
 import { SidebarProvider } from "./panel";
 import { detectRepoInfo } from "./git";
-import { analyze, L402Challenge } from "./client";
+import { analyze, checkPayment, L402Challenge } from "./client";
 
 let sidebar: SidebarProvider;
 let pendingChallenge: L402Challenge | null = null;
@@ -22,6 +22,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("diagramForge.analyze", cmdAnalyze),
     vscode.commands.registerCommand("diagramForge.analyzeConfirmed", cmdAnalyzeConfirmed),
     vscode.commands.registerCommand("diagramForge.submitPreimage", cmdSubmitPreimage),
+    vscode.commands.registerCommand("diagramForge.openBenchmark", cmdOpenBenchmark),
+    vscode.commands.registerCommand("diagramForge.openDiff", cmdOpenDiff),
     vscode.commands.registerCommand("diagramForge.openLast", cmdOpenLast)
   );
 }
@@ -113,20 +115,52 @@ async function cmdSubmitPreimage() {
   );
 }
 
-function startPoll(repoUrl: string, _tier: string, _idemKey: string, _challenge: L402Challenge) {
+function startPoll(repoUrl: string, _tier: string, _idemKey: string, challenge: L402Challenge) {
   stopPoll();
   let step = 0;
-  pollTimer = setInterval(() => {
+  pollTimer = setInterval(async () => {
+    // Auto-detect payment via server polling (same as payment.html)
+    if (challenge.paymentHash && pendingOpts) {
+      const { paid, preimage } = await checkPayment(challenge.paymentHash).catch(() => ({ paid: false, preimage: null }));
+      if (paid && preimage) {
+        stopPoll();
+        await doAnalyze(
+          pendingOpts.repoUrl!,
+          pendingOpts.tier,
+          pendingOpts.idemKey,
+          preimage,
+          challenge.macaroon,
+          pendingOpts.promoCode,
+        );
+        return;
+      }
+    }
     step = Math.min(step + 1, 11);
     const current = sidebar.getState();
     if (current.type === "analyzing") {
       sidebar.setState({ type: "analyzing", step, repoUrl });
     }
-  }, 5000);
+  }, 3000);
 }
 
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function cmdOpenBenchmark() {
+  const state = sidebar.getState();
+  if (state.type === "done") {
+    // Open viewer with #benchmark hash so it auto-opens the benchmark modal
+    vscode.env.openExternal(vscode.Uri.parse(state.viewerUrl + "#benchmark"));
+  }
+}
+
+function cmdOpenDiff() {
+  const state = sidebar.getState();
+  if (state.type === "done") {
+    // Open viewer with #diff hash so it auto-opens the diff picker
+    vscode.env.openExternal(vscode.Uri.parse(state.viewerUrl + "#diff"));
+  }
 }
 
 function cmdOpenLast() {

@@ -236,6 +236,7 @@ app.post(
           sats: 0,
         };
         log.info({ code: code.toUpperCase(), tier }, "promo code redeemed");
+        track("promo_redeemed", { tier, ip: req.ip });
       } else {
         // Return 402 with promo_error so the landing can show a specific message
         res.status(402).json({ error: "promo_invalid", promo_error: result.reason });
@@ -263,6 +264,7 @@ app.post(
             sats:         0,
           };
           log.info({ repo: repoUrl, sha: sha.slice(0, 8) }, "cache bypass — no payment needed");
+          track("cache_hit", { tier: req.body?.tier, ip: req.ip, repoUrl });
         }
       }
     } catch { /* non-critical — let normal flow handle it */ }
@@ -283,6 +285,7 @@ app.post(
         sats:         0,
       };
       log.info({ ip }, "free trial granted");
+      track("trial_granted", { tier: "basic", ip });
     }
     next();
   },
@@ -424,11 +427,13 @@ app.post(
       if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
       timer({ status: "success" });
       analyzeRequests.inc({ status: "success", tier });
+      track("analyze_completed", { tier, ip: req.ip, repoUrl: repo_url, meta: { nodes: graph.nodes.length, edges: graph.edges.length } });
       res.json(result);
     } catch (err) {
       log.error({ err }, "analysis error");
       timer({ status: "error" });
       analyzeRequests.inc({ status: "error", tier });
+      track("analyze_error", { tier, ip: req.ip, repoUrl: repo_url });
       if (idemStoreKey) idemStore.delete(idemStoreKey); // allow retry on error
       res.status(500).json({
         error: "analysis_failed",
@@ -537,6 +542,8 @@ app.get("/api/invoice-status/:hash", async (req, res) => {
 
 import { saveShare, getShare } from "./db/shares.js";
 import { redeemPromo } from "./db/promo.js";
+import { track } from "./db/analytics.js";
+import { supabase } from "./db/supabase.js";
 
 // ─── POST /api/share — save graph, return short ID ───────────────────────────
 
@@ -586,6 +593,7 @@ app.post("/api/share", async (req, res) => {
     fs.writeFileSync(path.join(GRAPHS_DIR, `${id}.json`), JSON.stringify(payload), "utf-8");
   }
 
+  track("share_created", { tier, ip: req.ip });
   res.json({ id, url: `/g/${id}` });
 });
 
@@ -628,6 +636,7 @@ app.get("/g/:id", async (req, res) => {
     res.status(404).set("Content-Type", "text/html").send(NOT_FOUND_HTML);
     return;
   }
+  track("share_viewed", { ip: req.ip, meta: { share_id: id } });
 
   const viewerPath = path.join(__dirname, "../src/viewer/index.html");
   let html = fs.readFileSync(viewerPath, "utf-8");
@@ -1061,6 +1070,7 @@ app.post("/stripe/checkout", async (req, res) => {
       successUrl,
       cancelUrl,
     });
+    track("stripe_checkout", { tier: safeTier, ip: req.ip, repoUrl: repo_url });
     res.json({ url, sessionId, tier: safeTier, price_usd: (PRICE_USD[safeTier] / 100).toFixed(2) });
   } catch (err) {
     res.status(500).json({ error: "stripe_error", message: err instanceof Error ? err.message : String(err) });
@@ -1090,6 +1100,7 @@ app.post(
         const tier = (meta["tier"] ?? "full") as "basic" | "full" | "live";
         const id   = session["id"] as string;
         stripeSessionStore.set(id, { tier });
+        track("stripe_paid", { tier });
         console.log(`[stripe] Session ${id} paid — tier: ${tier}`);
       }
     }
@@ -1325,6 +1336,73 @@ window.close();
     log.error({ err }, "github oauth error");
     res.redirect(`/?gh_error=server_error`);
   }
+});
+
+// ─── GET /api/admin/stats — funnel analytics ─────────────────────────────────
+
+app.get("/api/admin/stats", async (req, res) => {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret || req.headers["x-admin-secret"] !== secret) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  if (!supabase) {
+    res.status(503).json({ error: "supabase_unavailable" });
+    return;
+  }
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // last 30 days
+
+  const [byEvent, byTier, daily] = await Promise.all([
+    supabase.from("events").select("event, count", { count: "exact", head: false })
+      .gte("created_at", since)
+      .then(({ data }: { data: Record<string, unknown>[] | null }) => {
+        const counts: Record<string, number> = {};
+        (data ?? []).forEach((r) => {
+          const ev = r["event"] as string;
+          counts[ev] = (counts[ev] ?? 0) + 1;
+        });
+        return counts;
+      }),
+    supabase.from("events").select("tier, event")
+      .eq("event", "analyze_completed")
+      .gte("created_at", since)
+      .then(({ data }: { data: Record<string, unknown>[] | null }) => {
+        const counts: Record<string, number> = {};
+        (data ?? []).forEach((r) => {
+          const t = (r["tier"] as string) ?? "unknown";
+          counts[t] = (counts[t] ?? 0) + 1;
+        });
+        return counts;
+      }),
+    supabase.from("events").select("created_at, event")
+      .gte("created_at", since)
+      .then(({ data }: { data: Record<string, unknown>[] | null }) => {
+        const counts: Record<string, number> = {};
+        (data ?? []).forEach((r) => {
+          const day = (r["created_at"] as string).slice(0, 10);
+          counts[day] = (counts[day] ?? 0) + 1;
+        });
+        return counts;
+      }),
+  ]);
+
+  const trials = byEvent["trial_granted"] ?? 0;
+  const completed = byEvent["analyze_completed"] ?? 0;
+  const stripePaid = byEvent["stripe_paid"] ?? 0;
+
+  res.json({
+    period: "last_30_days",
+    by_event: byEvent,
+    analyze_by_tier: byTier,
+    daily_events: daily,
+    funnel: {
+      trials,
+      completed,
+      stripe_paid: stripePaid,
+      trial_to_complete_pct: trials ? ((completed / trials) * 100).toFixed(1) + "%" : "n/a",
+    },
+  });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

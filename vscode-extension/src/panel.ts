@@ -215,9 +215,9 @@ function render() {
 
   else if (state.type === 'confirming') {
     const tiers = [
-      { id: 'basic', label: 'Basic', price: '100 sats', iters: '8 iters' },
-      { id: 'full', label: 'Full', price: '500 sats', iters: '12 iters' },
-      { id: 'live', label: 'Live', price: '1000 sats', iters: 'deep' },
+      { id: 'basic', label: 'Basic', price: '2 000 sats', iters: '8 iters' },
+      { id: 'full', label: 'Full', price: '10 000 sats', iters: '12 iters' },
+      { id: 'live', label: 'Live', price: '25 000 sats', iters: 'deep' },
     ];
     const tierBtns = tiers.map(t => \`
       <button class="tier-btn \${state.tier === t.id ? 'active' : ''}" onclick="setTier('\${t.id}')">

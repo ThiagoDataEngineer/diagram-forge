@@ -1,4 +1,4 @@
-const SERVER = "https://forge.l402kit.com";
+const SERVER = "https://diagram-forge.onrender.com";
 
 export interface AnalyzeOpts {
   repoUrl?: string;
@@ -54,21 +54,33 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     const inv = wwwAuth.match(/invoice="([^"]+)"/)?.[1] ?? "";
     const mac = wwwAuth.match(/macaroon="([^"]+)"/)?.[1] ?? "";
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+
+    // Extract payment hash from macaroon (base64 JSON: { hash, exp })
+    // The 402 body has `priceSats` not `amount_sats`, and no `payment_hash` field.
+    let paymentHash = (body.payment_hash as string) ?? "";
+    if (!paymentHash && mac) {
+      try {
+        const decoded = JSON.parse(Buffer.from(mac, "base64").toString("utf8")) as Record<string, unknown>;
+        paymentHash = (decoded.hash as string) ?? "";
+      } catch { /* ignore */ }
+    }
+
     return {
       ok: false,
       l402: {
         invoice: inv,
         macaroon: mac,
-        paymentHash: (body.payment_hash as string) ?? "",
-        amountSats: (body.amount_sats as number) ?? 0,
-        tier: (body.tier as string) ?? "basic",
+        paymentHash,
+        amountSats: (body.amount_sats as number) ?? (body.priceSats as number) ?? 0,
+        tier: (body.tier as string) ?? opts.tier ?? "basic",
       },
     };
   }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText })) as Record<string, unknown>;
-    return { ok: false, error: (body.error as string) ?? res.statusText };
+    const msg = (body.error as string) ?? res.statusText;
+    return { ok: false, error: `${res.status}: ${msg}` };
   }
 
   const body = await res.json() as { id?: string; graph?: Graph };

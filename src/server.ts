@@ -287,14 +287,17 @@ app.post(
     return mockL402({ lightning, tier, memo: "Diagram Forge — repo analysis" })(req, res, next);
   },
   async (req: AuthedRequest, res) => {
-    // Rate limit (prod only — skip in mock/dev mode)
-    if (isProductionLightning()) {
+    // Rate limit only free requests (trial + cache bypass).
+    // Promo codes, real L402 payments, and Stripe bypass this limit.
+    const isFreeRequest = req.l402 &&
+      (req.l402.payment_hash.startsWith("trial_") || req.l402.payment_hash.startsWith("cache_"));
+    if (isProductionLightning() && isFreeRequest) {
       const ip = req.ip ?? "unknown";
       const { ok, remaining } = analyzeAllowed(ip);
       if (!ok) {
         res.status(429).json({
           error: "daily_limit_reached",
-          message: "Free analysis limit (3/day) reached. Upgrade to a paid tier.",
+          message: "Free analysis limit reached for today. Use a promo code or pay via Lightning.",
           remaining: 0,
         });
         return;
@@ -352,7 +355,9 @@ app.post(
 
       // P-3: if cache-bypass middleware already found the cached graph, return immediately
       if (req._prefetchedGraph) {
-        const result = { ok: true, tier, graph: req._prefetchedGraph, paid_sats: 0, cached: true };
+        const viewId = crypto.randomBytes(4).toString("hex");
+        await saveShare(viewId, { ...req._prefetchedGraph, _shared_at: new Date().toISOString() }).catch(() => {});
+        const result = { ok: true, id: viewId, tier, graph: req._prefetchedGraph, paid_sats: 0, cached: true };
         if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
         timer({ status: "cached" });
         analyzeRequests.inc({ status: "cached", tier });
@@ -370,7 +375,9 @@ app.post(
         const cached = getCachedGraph(identifier, sha);
         if (cached) {
           log.info({ identifier, sha: sha.slice(0, 8) }, "cache hit");
-          const result = { ok: true, tier, graph: cached, paid_sats: PRICE_SATS[tier], cached: true };
+          const viewId = crypto.randomBytes(4).toString("hex");
+          await saveShare(viewId, { ...cached, _shared_at: new Date().toISOString() }).catch(() => {});
+          const result = { ok: true, id: viewId, tier, graph: cached, paid_sats: PRICE_SATS[tier], cached: true };
           if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
           timer({ status: "cached" });
           analyzeRequests.inc({ status: "cached", tier });
@@ -411,7 +418,9 @@ app.post(
         share_link: tier !== "basic",
         animated: tier === "live",
       };
-      const result = { ok: true, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures };
+      const viewId = crypto.randomBytes(4).toString("hex");
+      await saveShare(viewId, { ...graph, _shared_at: new Date().toISOString() }).catch(() => {});
+      const result = { ok: true, id: viewId, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures };
       if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
       timer({ status: "success" });
       analyzeRequests.inc({ status: "success", tier });

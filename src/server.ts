@@ -133,7 +133,7 @@ app.get("/health", (_req, res) => {
   res.status(200).json({
     status: ok ? "ok" : "degraded",
     service: "diagram-forge",
-    version: "0.1.0",
+    version: process.env.npm_package_version ?? "0.1.0",
     tiers: PRICE_SATS,
     lightning_backend: backend,
     uptime_s: Math.floor(process.uptime()),

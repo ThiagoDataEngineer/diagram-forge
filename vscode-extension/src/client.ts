@@ -3,6 +3,7 @@ const SERVER = "https://forge.l402kit.com";
 export interface AnalyzeOpts {
   repoUrl?: string;
   tier?: "basic" | "full" | "live";
+  promoCode?: string;
   idempotencyKey?: string;
   preimage?: string;
   macaroon?: string;
@@ -45,7 +46,7 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
   const res = await fetch(`${SERVER}/analyze`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ repo_url: opts.repoUrl, tier: opts.tier ?? "basic" }),
+    body: JSON.stringify({ repo_url: opts.repoUrl, tier: opts.tier ?? "basic", ...(opts.promoCode ? { promo_code: opts.promoCode } : {}) }),
   });
 
   if (res.status === 402) {

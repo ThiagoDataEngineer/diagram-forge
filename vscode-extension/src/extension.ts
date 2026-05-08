@@ -6,7 +6,7 @@ import { analyze, L402Challenge } from "./client";
 
 let sidebar: SidebarProvider;
 let pendingChallenge: L402Challenge | null = null;
-let pendingOpts: { repoUrl?: string; tier: "basic" | "full" | "live"; idemKey: string } | null = null;
+let pendingOpts: { repoUrl?: string; tier: "basic" | "full" | "live"; idemKey: string; promoCode?: string } | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -21,6 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("diagramForge.analyze", cmdAnalyze),
     vscode.commands.registerCommand("diagramForge.analyzeConfirmed", cmdAnalyzeConfirmed),
+    vscode.commands.registerCommand("diagramForge.submitPreimage", cmdSubmitPreimage),
     vscode.commands.registerCommand("diagramForge.openLast", cmdOpenLast)
   );
 }
@@ -56,11 +57,11 @@ async function cmdAnalyzeConfirmed() {
   const state = sidebar.getState();
   if (state.type !== "confirming") return;
 
-  const { repoUrl, tier } = state;
+  const { repoUrl, tier, promoCode } = state;
   const idemKey = crypto.randomUUID();
-  pendingOpts = { repoUrl, tier, idemKey };
+  pendingOpts = { repoUrl, tier, idemKey, promoCode };
 
-  await doAnalyze(repoUrl, tier, idemKey);
+  await doAnalyze(repoUrl, tier, idemKey, undefined, undefined, promoCode);
 }
 
 async function doAnalyze(
@@ -68,11 +69,12 @@ async function doAnalyze(
   tier: "basic" | "full" | "live",
   idemKey: string,
   preimage?: string,
-  macaroon?: string
+  macaroon?: string,
+  promoCode?: string,
 ) {
   sidebar.setState({ type: "analyzing", step: 1, repoUrl });
 
-  const result = await analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon });
+  const result = await analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon, promoCode });
 
   if (result.ok) {
     stopPoll();
@@ -97,19 +99,25 @@ async function doAnalyze(
   sidebar.setState({ type: "error", message: result.error });
 }
 
-function startPoll(repoUrl: string, tier: "basic" | "full" | "live", idemKey: string, challenge: L402Challenge) {
+async function cmdSubmitPreimage() {
+  const state = sidebar.getState();
+  if (state.type !== "paying" || !state.preimage || !pendingOpts) return;
+  stopPoll();
+  await doAnalyze(
+    pendingOpts.repoUrl!,
+    pendingOpts.tier,
+    pendingOpts.idemKey,
+    state.preimage,
+    state.challenge.macaroon,
+    pendingOpts.promoCode,
+  );
+}
+
+function startPoll(repoUrl: string, _tier: string, _idemKey: string, _challenge: L402Challenge) {
   stopPoll();
   let step = 0;
-  pollTimer = setInterval(async () => {
+  pollTimer = setInterval(() => {
     step = Math.min(step + 1, 11);
-
-    // Check if invoice paid (simplified: just re-call analyze with macaroon)
-    // Real: poll /api/invoice-status or wait for preimage from user's wallet
-    // For now we try with just the macaroon — server will reject until paid,
-    // then user can trigger manually via wallet deeplink or copy-paste.
-    // A proper implementation would need a webhook or the user to paste the preimage.
-
-    // Update step indicator in analyzing state if we moved there
     const current = sidebar.getState();
     if (current.type === "analyzing") {
       sidebar.setState({ type: "analyzing", step, repoUrl });

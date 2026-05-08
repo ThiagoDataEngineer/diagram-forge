@@ -4,8 +4,8 @@ import { L402Challenge } from "./client";
 type PanelState =
   | { type: "idle" }
   | { type: "detecting" }
-  | { type: "confirming"; repoUrl: string; tier: "basic" | "full" | "live" }
-  | { type: "paying"; challenge: L402Challenge }
+  | { type: "confirming"; repoUrl: string; tier: "basic" | "full" | "live"; promoCode?: string }
+  | { type: "paying"; challenge: L402Challenge; preimage?: string }
   | { type: "analyzing"; step: number; repoUrl: string }
   | { type: "done"; viewerUrl: string; summary: string; confidence: number }
   | { type: "error"; message: string };
@@ -33,9 +33,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const state = this._state as { type: "paying"; challenge: L402Challenge };
         vscode.env.clipboard.writeText(state.challenge.invoice);
         vscode.window.showInformationMessage("⚡ Invoice copied — paste into your Lightning wallet");
+      } else if (msg.command === "preimageChange") {
+        const state = this._state as { type: "paying"; challenge: L402Challenge; preimage?: string };
+        this.setState({ ...state, preimage: msg.payload as string });
+      } else if (msg.command === "submitPreimage") {
+        vscode.commands.executeCommand("diagramForge.submitPreimage");
       } else if (msg.command === "tierChange") {
-        const state = this._state as { type: "confirming"; repoUrl: string; tier: string };
+        const state = this._state as { type: "confirming"; repoUrl: string; tier: string; promoCode?: string };
         this.setState({ ...state, tier: msg.payload as "basic" | "full" | "live" });
+      } else if (msg.command === "promoChange") {
+        const state = this._state as { type: "confirming"; repoUrl: string; tier: "basic" | "full" | "live"; promoCode?: string };
+        this.setState({ ...state, promoCode: msg.payload as string });
       } else if (msg.command === "confirm") {
         vscode.commands.executeCommand("diagramForge.analyzeConfirmed");
       }
@@ -58,7 +66,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://raw.githubusercontent.com data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -187,6 +195,11 @@ function render() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="13 2 13 9 20 9"/><path d="M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg>
         Analyze Repo
       </button>
+      <div style="margin-top:14px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);line-height:0">
+        <img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/docs/demo-viewer.gif"
+          alt="Diagram Forge — example output"
+          style="width:100%;height:auto;display:block;opacity:0.85"/>
+      </div>
     \`;
   }
 
@@ -214,6 +227,14 @@ function render() {
         <div style="font-size:11px;word-break:break-all;margin-bottom:10px">\${state.repoUrl}</div>
         <div class="label">Analysis tier</div>
         <div class="tier-group">\${tierBtns}</div>
+        <div class="label" style="margin-top:8px">Promo code (optional)</div>
+        <input
+          type="text" id="promo-input"
+          placeholder="e.g. PRIMAL"
+          value="\${state.promoCode ?? ''}"
+          oninput="vscode.postMessage({command:'promoChange',payload:this.value.trim().toUpperCase()})"
+          style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:11px;font-family:monospace;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px;box-sizing:border-box;"
+        />
         <button class="primary" onclick="vscode.postMessage({command:'confirm'})">
           ⚡ Analyze
         </button>
@@ -223,16 +244,29 @@ function render() {
 
   else if (state.type === 'paying') {
     const c = state.challenge;
+    const preimage = state.preimage ?? '';
+    const canSubmit = preimage.length === 64;
     root.innerHTML = \`
       <div class="card">
         <div class="status-row"><div class="dot purple"></div><span>Payment required</span></div>
         <div class="amount-badge">⚡ \${c.amountSats} sats — \${c.tier}</div>
         <div class="label">Lightning invoice</div>
         <div class="invoice-box">\${c.invoice}</div>
-        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:8px">
+        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:12px">
           Copy Invoice
         </button>
-        <div class="hint">Pay with any Lightning wallet. The diagram will start generating automatically once payment confirms.</div>
+        <div class="label">Payment proof (preimage)</div>
+        <div class="hint" style="margin-bottom:6px">After paying, your wallet shows a payment proof. Paste the 64-character hex string below.</div>
+        <input
+          type="text" id="preimage-input"
+          placeholder="64-char hex preimage from your wallet"
+          value="\${preimage}"
+          oninput="onPreimageInput(this.value)"
+          style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:10px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;"
+        />
+        <button class="primary" \${canSubmit ? '' : 'disabled'} onclick="vscode.postMessage({command:'submitPreimage'})">
+          ⚡ Submit &amp; Generate Diagram
+        </button>
       </div>
     \`;
   }
@@ -277,6 +311,14 @@ function setTier(tier) {
   state = { ...state, tier };
   vscode.postMessage({ command: 'tierChange', payload: tier });
   render();
+}
+
+function onPreimageInput(val) {
+  const clean = val.trim().toLowerCase();
+  vscode.postMessage({ command: 'preimageChange', payload: clean });
+  // Update button state without full re-render
+  const btn = document.querySelector('#root button.primary:last-child');
+  if (btn) btn.disabled = clean.length !== 64;
 }
 
 window.addEventListener('message', e => {

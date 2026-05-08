@@ -495,9 +495,27 @@ app.post("/api/share", async (req, res) => {
 
 // ─── GET /g/:id — short link → viewer ────────────────────────────────────────
 
+const NOT_FOUND_HTML = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Diagram not found — Diagram Forge</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0D1117;color:#E6EDF3;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{text-align:center;max-width:420px}.icon{font-size:48px;margin-bottom:20px}.title{font-size:24px;font-weight:800;margin-bottom:10px}
+.sub{font-size:15px;color:#768390;line-height:1.6;margin-bottom:28px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:linear-gradient(135deg,#7C3AED,#A855F7);color:#fff;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px}
+</style></head>
+<body><div class="box">
+  <div class="icon">⚡</div>
+  <div class="title">Diagram not found</div>
+  <div class="sub">This diagram link has expired or doesn't exist.<br/>Share links are permanent for paid analyses — generate a new one to share.</div>
+  <a class="btn" href="https://forge.l402kit.com">← Analyze a repo</a>
+</div></body></html>`;
+
 app.get("/g/:id", async (req, res) => {
   const { id } = req.params;
-  if (!/^[a-f0-9]{8}$/.test(id)) { res.status(400).send("Invalid ID"); return; }
+  if (!/^[a-zA-Z0-9_-]{4,32}$/.test(id)) {
+    res.status(404).set("Content-Type", "text/html").send(NOT_FOUND_HTML);
+    return;
+  }
 
   let graph: ArchitectureGraph | null = null;
 
@@ -511,7 +529,7 @@ app.get("/g/:id", async (req, res) => {
   }
 
   if (!graph) {
-    res.status(404).send("Diagram not found or expired.");
+    res.status(404).set("Content-Type", "text/html").send(NOT_FOUND_HTML);
     return;
   }
 

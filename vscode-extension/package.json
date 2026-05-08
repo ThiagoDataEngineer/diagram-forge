@@ -5,7 +5,7 @@
   "version": "0.1.6",
   "publisher": "ShinyDapps",
   "icon": "icon.png",
-  "repository": { "type": "git", "url": "https://github.com/shinydapps/diagram-forge" },
+  "repository": { "type": "git", "url": "https://github.com/ShinyDapps/diagram-forge" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Visualization", "Other"],
   "keywords": ["architecture", "diagram", "AI", "lightning", "bitcoin"],

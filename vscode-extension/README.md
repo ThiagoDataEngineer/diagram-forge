@@ -2,7 +2,7 @@
 
 > Paste any GitHub URL → Claude analyzes the codebase → interactive architecture diagram in seconds. Pay per use via Lightning Network.
 
-![Diagram Forge Extension Demo](https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/demo-extension.gif)
+![Diagram Forge Extension Demo](https://raw.githubusercontent.com/ShinyDapps/diagram-forge/main/vscode-extension/media/demo-extension.gif)
 
 ---
 
@@ -87,7 +87,7 @@ TypeScript · JavaScript · Python · Java · Go · Rust · Ruby · Scala · Jup
 
 ## Troubleshooting
 
-**"Not Found" error** — Update the extension to the latest version (v0.1.2+). Older versions used an incorrect endpoint.
+**"Not Found" error** — Make sure you have the latest version installed. Open the Extensions panel (`Ctrl+Shift+X`), find Diagram Forge, and click Update if available.
 
 **Analysis times out** — Large repos (>1000 files) can take 60–90s on the Full tier. The progress bar updates as Claude explores the codebase.
 
@@ -98,9 +98,9 @@ TypeScript · JavaScript · Python · Java · Go · Rust · Ruby · Scala · Jup
 ## Links
 
 - **Web app**: [forge.l402kit.com](https://forge.l402kit.com)
-- **GitHub**: [ThiagoDataEngineer/diagram-forge](https://github.com/ThiagoDataEngineer/diagram-forge)
+- **GitHub**: [ShinyDapps/diagram-forge](https://github.com/ShinyDapps/diagram-forge)
 - **L402 protocol**: [l402kit.com](https://l402kit.com)
-- **Issues**: [GitHub Issues](https://github.com/ThiagoDataEngineer/diagram-forge/issues)
+- **Issues**: [GitHub Issues](https://github.com/ShinyDapps/diagram-forge/issues)
 
 ---
 

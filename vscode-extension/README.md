@@ -2,7 +2,7 @@
 
 > Paste any GitHub URL → Claude analyzes the codebase → interactive architecture diagram in seconds. Pay per use via Lightning Network.
 
-![Diagram Forge Extension Demo](https://raw.githubusercontent.com/ShinyDapps/diagram-forge/main/vscode-extension/media/demo-extension.gif)
+![Diagram Forge Extension Demo](https://raw.githubusercontent.com/shinydapps-creator/diagram-forge/main/vscode-extension/media/demo-extension.gif)
 
 ---
 
@@ -98,9 +98,9 @@ TypeScript · JavaScript · Python · Java · Go · Rust · Ruby · Scala · Jup
 ## Links
 
 - **Web app**: [forge.l402kit.com](https://forge.l402kit.com)
-- **GitHub**: [ShinyDapps/diagram-forge](https://github.com/ShinyDapps/diagram-forge)
+- **GitHub**: [ShinyDapps/diagram-forge](https://github.com/shinydapps-creator/diagram-forge)
 - **L402 protocol**: [l402kit.com](https://l402kit.com)
-- **Issues**: [GitHub Issues](https://github.com/ShinyDapps/diagram-forge/issues)
+- **Issues**: [GitHub Issues](https://github.com/shinydapps-creator/diagram-forge/issues)
 
 ---
 

@@ -27,7 +27,7 @@
     "lightning"
   ],
   "author": "ShinyDapps",
-  "repository": { "type": "git", "url": "https://github.com/ShinyDapps/diagram-forge" },
+  "repository": { "type": "git", "url": "https://github.com/shinydapps-creator/diagram-forge" },
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {

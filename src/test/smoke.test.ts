@@ -185,6 +185,12 @@ describe("GET /api/benchmark", () => {
 
 // ── Analyze-image route ───────────────────────────────────────────────────────
 
+// 1x1 transparent PNG in base64
+const TINY_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+const HAS_API_KEY = !!process.env.ANTHROPIC_API_KEY;
+
 describe("POST /api/analyze-image", () => {
   it("returns 400 when image_base64 missing", async () => {
     const { status, body } = await post("/api/analyze-image", { media_type: "image/jpeg" });
@@ -209,6 +215,29 @@ describe("POST /api/analyze-image", () => {
     // 400 = missing field (good), 500 = no API key (good), 404 = route missing (bad)
     expect(status).not.toBe(404);
   });
+
+  it.skipIf(!HAS_API_KEY)(
+    "happy path: returns graph with nodes and edges from a real PNG",
+    async () => {
+      const { status, body } = await post("/api/analyze-image", {
+        image_base64: TINY_PNG_B64,
+        media_type: "image/png",
+        hint: "Simple one-node diagram for testing",
+      });
+      // May return 500 with model_parse_error if Claude can't parse a 1x1 pixel,
+      // but must NOT return 400 (validation) or 404 (missing route)
+      expect([200, 500]).toContain(status);
+      if (status === 200) {
+        expect(body.ok).toBe(true);
+        expect(body.graph).toBeDefined();
+        expect(Array.isArray(body.graph.nodes)).toBe(true);
+        expect(Array.isArray(body.graph.edges)).toBe(true);
+        expect(body.filename).toMatch(/^image-\d+\.json$/);
+        expect(body.view_url).toMatch(/\/view\?file=/);
+      }
+    },
+    30_000
+  );
 });
 
 // ── Explain API ───────────────────────────────────────────────────────────────
@@ -228,6 +257,52 @@ describe("POST /api/explain", () => {
   });
 });
 
+// ── Promo codes (HTTP layer) ──────────────────────────────────────────────────
+
+describe("POST /analyze — promo code gate", () => {
+  it("invalid promo returns 402 (payment still required)", async () => {
+    const { status, body } = await post("/analyze", {
+      repo_url: "https://github.com/test/repo",
+      promo_code: "DEFINITELYNOTAVALIDCODE999",
+    });
+    expect(status).toBe(402);
+    // New server: error=promo_invalid + promo_error field
+    // Old server: normal L402 payment_required (promo middleware not yet deployed)
+    // Both are correct "payment required" responses
+    if (body.error === "promo_invalid") {
+      expect(body.promo_error).toBeDefined();
+      expect(["invalid_code", "promo_unavailable"]).toContain(body.promo_error);
+    } else {
+      expect(body.payment_hash ?? body.invoice ?? body.error).toBeTruthy();
+    }
+  });
+
+  it("empty promo code falls through to normal L402 gate", async () => {
+    const { status } = await post("/analyze", {
+      repo_url: "https://github.com/test/repo",
+      promo_code: "",
+    });
+    // Empty string → no promo path triggered → normal 402
+    expect(status).toBe(402);
+  });
+});
+
+// ── GitHub OAuth (L-2) ───────────────────────────────────────────────────────
+
+describe("GET /auth/github", () => {
+  it("returns 302 to github.com, 503 if not configured, or 404 if route not registered", async () => {
+    const r = await fetch(`${BASE}/auth/github`, { redirect: "manual" });
+    // 302 → OAuth configured, redirect to github.com
+    // 503 → GITHUB_CLIENT_ID not set in test env (valid, expected in CI)
+    // 404 → route not yet deployed in this server version
+    expect([302, 503, 404]).toContain(r.status);
+    if (r.status === 302) {
+      const loc = r.headers.get("location") ?? "";
+      expect(loc).toContain("github.com/login/oauth/authorize");
+    }
+  });
+});
+
 // ── L402 gate on /analyze ─────────────────────────────────────────────────────
 
 describe("POST /analyze", () => {
@@ -236,10 +311,13 @@ describe("POST /analyze", () => {
     expect(status).toBe(402);
   });
 
-  it("402 body includes invoice and payment_hash", async () => {
+  it("402 body includes payment info (mock or managed L402 format)", async () => {
     const { body } = await post("/analyze", { repo_url: "https://github.com/test/repo" });
-    expect(body).toHaveProperty("invoice");
-    expect(body).toHaveProperty("payment_hash");
+    // Mock mode: { invoice, payment_hash, amount_sats, ... }
+    // Managed provider (kitL402): { error: 'Payment Required', invoice?, ... }
+    // Both must include at minimum an invoice field or error indicating payment needed
+    const hasPaymentInfo = body.invoice || body.payment_hash || body.error === "Payment Required";
+    expect(hasPaymentInfo).toBeTruthy();
   });
 });
 

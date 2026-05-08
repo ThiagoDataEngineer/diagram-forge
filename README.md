@@ -107,16 +107,6 @@ npm run dev
 # → http://localhost:3000
 ```
 
-### CLI
-
-```bash
-# Analyze a local project
-npx diagram-forge analyze ./my-project
-
-# Analyze a GitHub repo
-npx diagram-forge analyze https://github.com/torvalds/linux
-```
-
 ### MCP (Claude Desktop / Cursor)
 
 Add to your `mcp.json`:

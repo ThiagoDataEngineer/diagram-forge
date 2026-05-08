@@ -193,6 +193,16 @@ describe("Share e short link", () => {
     const r = await fetch(`${BASE}/g/${id}`);
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toMatch(/html/);
+    const html = await r.text();
+    expect(html).toContain("window.__GRAPH_DATA__");
+  });
+
+  it("GET /g/<inexistente> retorna erro (não 200)", async () => {
+    const r = await fetch(`${BASE}/g/naoexiste99`);
+    // Must not return 200 — graph doesn't exist
+    // 404 = new branded page, 400 = old behavior, both are valid "not found" responses
+    expect(r.status).not.toBe(200);
+    expect([400, 404]).toContain(r.status);
   });
 });
 

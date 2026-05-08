@@ -89,7 +89,17 @@ app.use((_req, res, next) => {
 
 // ─── Request type with L402 attached ─────────────────────────────────────────
 
-type AuthedRequest = express.Request & { l402?: { payment_hash: string; expires_at: number; tier: string; sats: number } };
+type AuthedRequest = express.Request & {
+  l402?: { payment_hash: string; expires_at: number; tier: string; sats: number };
+  _prefetchedSha?: string | null;
+  _prefetchedGraph?: unknown;
+};
+
+// ─── P-1: Trial store — one free basic analysis per IP ───────────────────────
+const trialStore = new Set<string>();
+
+// ─── P-3: Cache-bypass store — deduplicate SHA lookups across middlewares ─────
+// Nothing persisted here; the SHA is attached to the request object instead.
 
 // ─── In-memory invoice store (hash → preimage, for mock polling) ─────────────
 // In production this would be a DB or Redis.
@@ -97,16 +107,24 @@ const invoiceStore = new Map<string, { paid: boolean; preimage?: string }>();
 
 // ─── Stripe paid sessions (sessionId → tier) ──────────────────────────────────
 // Populated by the Stripe webhook; consumed once by /analyze.
-const stripeSessionStore = new Map<string, { tier: "basic" | "full" | "live"; repoUrl?: string }>();
+const stripeSessionStore = new Map<string, { tier: "basic" | "full" | "live" }>();
 
 // ─── 3.3: Idempotency store ───────────────────────────────────────────────────
 // Prevents duplicate analyses from double-clicks or retried requests.
 // Key: `${Idempotency-Key}:${payment_hash}` — cross-user safe.
-type IdemEntry = { status: "running" } | { status: "done"; result: unknown };
+type IdemEntry = { status: "running"; startedAt: number } | { status: "done"; result: unknown };
 const idemStore = new Map<string, { entry: IdemEntry; expiresAt: number }>();
+const IDEM_TTL_MS    = 2 * 60 * 60 * 1000;  // 2h for completed results
+const IDEM_RUNNING_TIMEOUT_MS = 10 * 60 * 1000; // 10 min max for "running" — allows retry if server crashed
 setInterval(() => {
   const now = Date.now();
-  for (const [k, v] of idemStore) if (v.expiresAt < now) idemStore.delete(k);
+  for (const [k, v] of idemStore) {
+    if (v.expiresAt < now) { idemStore.delete(k); continue; }
+    // Expire stale "running" entries so crashed analyses can be retried
+    if (v.entry.status === "running" && now - v.entry.startedAt > IDEM_RUNNING_TIMEOUT_MS) {
+      idemStore.delete(k);
+    }
+  }
 }, 60_000).unref();
 
 // ─── 3.1: Zod schema for /analyze request body ───────────────────────────────
@@ -149,21 +167,29 @@ app.get("/pricing", (_req, res) => {
   res.json({
     tiers: {
       basic: {
-        description: "Quick scan — up to 10 key files, main services detected",
+        description: "First look — top 10 files, main services detected. Free on first use per IP.",
         lightning_sats: PRICE_SATS.basic,
         card_usd: "5.00",
+        features: ["Architecture diagram", "Node inspect", "80+ tech logos", "Export SVG/PNG"],
+        excludes: ["Benchmark score", "Diff engine", "Persistent share link"],
+        first_use: "free",
       },
       full: {
-        description: "Full repo analysis — all services, connections, monorepos, notebooks",
+        description: "Complete repo — all services, connections, monorepos, data pipelines.",
         lightning_sats: PRICE_SATS.full,
         card_usd: "15.00",
+        features: ["Everything in Basic", "Full codebase scan", "Architecture benchmark (6 dimensions)", "Diff engine (compare snapshots)", "Persistent share link (/g/:id)"],
+        excludes: [],
       },
       live: {
-        description: "Full analysis + animated SVG diagram with official logos",
+        description: "Full analysis + animated particle flows for teams and presentations.",
         lightning_sats: PRICE_SATS.live,
         card_usd: "39.00",
+        features: ["Everything in Full", "Animated SVG particle flows", "Protocol-colored edges", "Minimap + pan/zoom"],
+        excludes: [],
       },
     },
+    trial: "Basic tier is free on first analysis per IP. Revisiting the same repo (same commit SHA) is always free.",
     note: "Lightning prices are lower — no credit card processing fees.",
     lightning_protocol: "L402 (HTTP 402 + Lightning Network)",
     card_processor: "Stripe",
@@ -204,7 +230,7 @@ app.post(
       if (result.valid) {
         const tier = result.tier ?? (req.body?.tier as "basic" | "full" | "live") ?? "basic";
         (req as AuthedRequest).l402 = {
-          payment_hash: `promo_${code.toUpperCase()}_${Date.now()}`,
+          payment_hash: `promo_${code.toUpperCase()}_${crypto.randomBytes(8).toString("hex")}`,
           expires_at: Math.floor(Date.now() / 1000) + 7200,
           tier,
           sats: 0,
@@ -218,8 +244,50 @@ app.post(
     }
     next();
   },
+  // ── P-3: Cache bypass — if same SHA already analyzed, skip payment ─────────
+  async (req: AuthedRequest, _res, next) => {
+    if (req.l402) return next(); // already authed
+    const repoUrl = req.body?.repo_url as string | undefined;
+    if (!repoUrl) return next();
+    try {
+      const sha = getRemoteSha(repoUrl);
+      req._prefetchedSha = sha;
+      if (sha) {
+        const cached = getCachedGraph(repoUrl, sha);
+        if (cached) {
+          req._prefetchedGraph = cached;
+          req.l402 = {
+            payment_hash: `cache_${sha.slice(0, 16)}`,
+            expires_at:   Math.floor(Date.now() / 1000) + 3600,
+            tier:         (req.body?.tier as string) ?? "full",
+            sats:         0,
+          };
+          log.info({ repo: repoUrl, sha: sha.slice(0, 8) }, "cache bypass — no payment needed");
+        }
+      }
+    } catch { /* non-critical — let normal flow handle it */ }
+    next();
+  },
+  // ── P-1: Free trial — one basic analysis per IP (first-time users) ──────────
+  (req: AuthedRequest, _res, next) => {
+    if (req.l402) return next(); // already authed
+    const tier = (req.body?.tier as "basic" | "full" | "live") ?? "basic";
+    if (tier !== "basic") return next(); // trial only on basic
+    const ip = req.ip ?? "unknown";
+    if (!trialStore.has(ip)) {
+      trialStore.add(ip);
+      req.l402 = {
+        payment_hash: `trial_${ip}_${crypto.randomBytes(4).toString("hex")}`,
+        expires_at:   Math.floor(Date.now() / 1000) + 3600,
+        tier:         "basic",
+        sats:         0,
+      };
+      log.info({ ip }, "free trial granted");
+    }
+    next();
+  },
   (req: AuthedRequest, res, next) => {
-    // If already authenticated via Stripe or promo, skip L402 gate
+    // If already authenticated via Stripe, promo, cache-bypass, or trial, skip L402 gate
     if ((req as AuthedRequest).l402) return next();
     const tier = (req.body?.tier as "basic" | "full" | "live") ?? "full";
     if (isProductionLightning() || process.env.LIGHTNING_ADDRESS) {
@@ -280,7 +348,7 @@ app.post(
           return;
         }
       }
-      idemStore.set(idemStoreKey, { entry: { status: "running" }, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+      idemStore.set(idemStoreKey, { entry: { status: "running", startedAt: Date.now() }, expiresAt: Date.now() + IDEM_TTL_MS });
     }
 
     let cloneCleanup: (() => void) | null = null;
@@ -288,18 +356,31 @@ app.post(
     const timer = analyzeDuration.startTimer({ tier });
 
     try {
-      // ── Cache check before cloning / analyzing ─────────────────────────────
+      // ── Cache check — use prefetched result from cache-bypass middleware if available ──
       const identifier = repo_url ?? repo_path!;
-      const sha = repo_url
-        ? getRemoteSha(repo_url)
-        : getLocalSha(path.resolve(repo_path!));
+
+      // P-3: if cache-bypass middleware already found the cached graph, return immediately
+      if (req._prefetchedGraph) {
+        const result = { ok: true, tier, graph: req._prefetchedGraph, paid_sats: 0, cached: true };
+        if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
+        timer({ status: "cached" });
+        analyzeRequests.inc({ status: "cached", tier });
+        res.json(result);
+        return;
+      }
+
+      const sha = req._prefetchedSha !== undefined
+        ? req._prefetchedSha
+        : repo_url
+          ? getRemoteSha(repo_url)
+          : getLocalSha(path.resolve(repo_path!));
 
       if (sha) {
         const cached = getCachedGraph(identifier, sha);
         if (cached) {
           log.info({ identifier, sha: sha.slice(0, 8) }, "cache hit");
           const result = { ok: true, tier, graph: cached, paid_sats: PRICE_SATS[tier], cached: true };
-          if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+          if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
           timer({ status: "cached" });
           analyzeRequests.inc({ status: "cached", tier });
           res.json(result);
@@ -333,8 +414,14 @@ app.post(
 
       if (sha) setCachedGraph(identifier, sha, graph);
 
-      const result = { ok: true, tier, graph, paid_sats: PRICE_SATS[tier] };
-      if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+      const tierFeatures = {
+        benchmark: tier !== "basic",
+        diff: tier !== "basic",
+        share_link: tier !== "basic",
+        animated: tier === "live",
+      };
+      const result = { ok: true, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures };
+      if (idemStoreKey) idemStore.set(idemStoreKey, { entry: { status: "done", result }, expiresAt: Date.now() + IDEM_TTL_MS });
       timer({ status: "success" });
       analyzeRequests.inc({ status: "success", tier });
       res.json(result);
@@ -473,9 +560,18 @@ function resolveGraphFile(input: string): string | null {
 }
 
 app.post("/api/share", async (req, res) => {
-  const { graph } = req.body as { graph?: ArchitectureGraph };
+  const { graph, tier } = req.body as { graph?: ArchitectureGraph; tier?: string };
   if (!graph || !Array.isArray(graph.nodes)) {
     res.status(400).json({ error: "invalid_graph" });
+    return;
+  }
+  // Share links are a Full/Live feature — not available on Basic tier
+  if (tier === "basic") {
+    res.status(403).json({
+      error: "tier_required",
+      message: "Share links require Full or Live tier. Upgrade to share your diagram.",
+      upgrade_url: "/pricing",
+    });
     return;
   }
 
@@ -763,7 +859,9 @@ Respond with plain prose only — no markdown headers, no bullet points.`;
       max_tokens: 300,
       messages: [{ role: "user", content: prompt }],
     });
-    const text = (msg.content[0] as { type: string; text: string }).text;
+    const block = msg.content[0] as { type: string; text?: string } | undefined;
+    const text = block?.type === "text" && block.text ? block.text : "";
+    if (!text) { res.status(500).json({ error: "empty_response" }); return; }
     res.json({ explanation: text });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -991,7 +1089,7 @@ app.post(
       if (session["payment_status"] === "paid") {
         const tier = (meta["tier"] ?? "full") as "basic" | "full" | "live";
         const id   = session["id"] as string;
-        stripeSessionStore.set(id, { tier, repoUrl: meta["repo_url"] });
+        stripeSessionStore.set(id, { tier });
         console.log(`[stripe] Session ${id} paid — tier: ${tier}`);
       }
     }
@@ -1027,13 +1125,11 @@ app.get("/stripe/success", async (req, res) => {
 
       // Register in stripeSessionStore (webhook may have already done this)
       if (!stripeSessionStore.has(sessionId)) {
-        stripeSessionStore.set(sessionId, { tier, repoUrl: finalRepo });
+        stripeSessionStore.set(sessionId, { tier });
       }
 
-      // Return auto-submit page
-      const safeRepo    = finalRepo.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const safeTier    = tier.replace(/</g, "&lt;");
-      const safeSession = sessionId.replace(/</g, "&lt;");
+      // Return auto-submit page — embed values as JSON object (safe in JS context)
+      const pageData = JSON.stringify({ repo_url: finalRepo, tier, session: sessionId });
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.send(`<!DOCTYPE html>
@@ -1060,6 +1156,7 @@ p{font-size:14px;color:#768390}
 <p id="status">Starting analysis…</p>
 <div class="bar"><div class="fill"></div></div>
 <script>
+const __d = ${pageData};
 (async () => {
   const status = document.getElementById('status');
   try {
@@ -1068,9 +1165,9 @@ p{font-size:14px;color:#768390}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Stripe ${safeSession}',
+        'Authorization': 'Stripe ' + __d.session,
       },
-      body: JSON.stringify({ repo_url: '${safeRepo}', tier: '${safeTier}' }),
+      body: JSON.stringify({ repo_url: __d.repo_url, tier: __d.tier }),
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
@@ -1082,7 +1179,7 @@ p{font-size:14px;color:#768390}
     status.textContent = 'Done! Redirecting…';
     setTimeout(() => { window.location.href = '/view?from=session'; }, 800);
   } catch (err) {
-    status.textContent = 'Network error: ' + err.message;
+    status.textContent = 'Network error: ' + (err instanceof Error ? err.message : String(err));
   }
 })();
 </script>
@@ -1132,22 +1229,32 @@ const GITHUB_CLIENT_ID     = process.env.GITHUB_CLIENT_ID     ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const GITHUB_REDIRECT_URI  = process.env.GITHUB_REDIRECT_URI  ?? "https://diagram-forge.onrender.com/auth/github/callback";
 
+// CSRF protection: store valid states for 10 minutes
+const oauthStateStore = new Map<string, number>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [s, exp] of oauthStateStore) if (exp < now) oauthStateStore.delete(s);
+}, 60_000).unref();
+
 app.get("/auth/github", (_req, res) => {
   if (!GITHUB_CLIENT_ID) {
     res.status(503).json({ error: "GitHub OAuth not configured" });
     return;
   }
+  const state = crypto.randomBytes(16).toString("hex");
+  oauthStateStore.set(state, Date.now() + 10 * 60 * 1000);
   const params = new URLSearchParams({
     client_id:    GITHUB_CLIENT_ID,
     redirect_uri: GITHUB_REDIRECT_URI,
     scope:        "repo",
-    state:        crypto.randomBytes(8).toString("hex"),
+    state,
   });
   res.redirect(`https://github.com/login/oauth/authorize?${params}`);
 });
 
 app.get("/auth/github/callback", async (req, res) => {
   const code  = req.query.code  as string | undefined;
+  const state = req.query.state as string | undefined;
   const error = req.query.error as string | undefined;
 
   if (error || !code) {
@@ -1155,7 +1262,16 @@ app.get("/auth/github/callback", async (req, res) => {
     return;
   }
 
+  // CSRF check: state must have been issued by /auth/github and not expired
+  if (!state || !oauthStateStore.has(state)) {
+    res.redirect(`/?gh_error=invalid_state`);
+    return;
+  }
+  oauthStateStore.delete(state); // one-time use
+
   try {
+    const ghTimeout = (ms: number) => AbortSignal.timeout(ms);
+
     // Exchange code for token
     const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
@@ -1166,6 +1282,7 @@ app.get("/auth/github/callback", async (req, res) => {
         code,
         redirect_uri:  GITHUB_REDIRECT_URI,
       }),
+      signal: ghTimeout(10_000),
     });
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
 
@@ -1177,7 +1294,10 @@ app.get("/auth/github/callback", async (req, res) => {
     // Fetch user repos (first 100, sorted by recent push)
     const reposRes = await fetch(
       "https://api.github.com/user/repos?sort=pushed&per_page=100&type=owner",
-      { headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "diagram-forge" } }
+      {
+        headers: { Authorization: `Bearer ${tokenData.access_token}`, "User-Agent": "diagram-forge" },
+        signal: ghTimeout(10_000),
+      }
     );
     const repos = await reposRes.json() as Array<{ full_name: string; private: boolean; pushed_at: string }>;
 

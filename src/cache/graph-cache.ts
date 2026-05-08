@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import type { ArchitectureGraph } from "../analyzer/agent.js";
 
 const CACHE_DIR = path.join(process.cwd(), "data", "cache");
@@ -39,11 +39,11 @@ export function getLocalSha(repoPath: string): string | null {
 /** Get HEAD SHA from a remote URL without cloning (uses git ls-remote). */
 export function getRemoteSha(repoUrl: string): string | null {
   try {
-    const out = execSync(`git ls-remote --quiet --exit-code "${repoUrl}" HEAD`, {
-      encoding: "utf-8",
-      timeout: 10_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const out = execFileSync(
+      "git",
+      ["ls-remote", "--quiet", "--exit-code", repoUrl, "HEAD"],
+      { encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] }
+    );
     const sha = out.split("\t")[0].trim();
     return sha.length === 40 || sha.length === 64 ? sha : null;
   } catch {

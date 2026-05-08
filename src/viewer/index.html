@@ -3460,7 +3460,7 @@ async function exportPNG() {
 
   } catch (err) {
     console.error('Export failed:', err);
-    showToast('Export failed: ' + err.message);
+    showToast('Export failed: ' + (err instanceof Error ? err.message : String(err)));
   } finally {
     overlay.style.display = 'none';
   }
@@ -3780,7 +3780,8 @@ async function analyzeImage() {
     btn.disabled    = false;
     btn.textContent = 'Analyze Image';
     status.style.display = 'block';
-    status.innerHTML = `<span style="color:#FCA5A5">Error: ${err.message}</span>`;
+    status.textContent = 'Error: ' + (err instanceof Error ? err.message : String(err));
+    status.style.color = '#FCA5A5';
   }
 }
 
@@ -4232,7 +4233,7 @@ document.getElementById('benchmark-export-md').addEventListener('click', async (
     a.click();
     showToast('Benchmark report downloaded');
   } catch (err) {
-    showToast('Export failed: ' + err.message);
+    showToast('Export failed: ' + (err instanceof Error ? err.message : String(err)));
   }
 });
 
@@ -4240,11 +4241,12 @@ init().then(() => {
   window.dispatchEvent(new CustomEvent('diagramReady'));
 }).catch(err => {
   const el = document.getElementById('loading');
-  if (el) el.innerHTML = `<div style="color:#EF4444;font-size:13px;padding:20px;max-width:400px;text-align:center">
-    <div style="font-size:24px;margin-bottom:8px">⚠️</div>
-    <div style="font-weight:700;margin-bottom:6px">Render error</div>
-    <div style="font-family:monospace;font-size:11px;color:#F87171">${err?.message ?? err}</div>
-  </div>`;
+  if (el) {
+    const msg = err instanceof Error ? err.message : String(err);
+    el.innerHTML = '<div style="color:#EF4444;font-size:13px;padding:20px;max-width:400px;text-align:center"><div style="font-size:24px;margin-bottom:8px">⚠️</div><div style="font-weight:700;margin-bottom:6px">Render error</div><div id="err-msg" style="font-family:monospace;font-size:11px;color:#F87171"></div></div>';
+    const msgEl = el.querySelector('#err-msg');
+    if (msgEl) msgEl.textContent = msg;
+  }
   console.error('[diagram-forge] init() error:', err);
 });
 

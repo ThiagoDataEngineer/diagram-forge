@@ -81,9 +81,9 @@ export function verifyMacaroon(macaroon: string): MacaroonPayload | null {
 // ─── Price Table ──────────────────────────────────────────────────────────────
 
 export const PRICE_SATS = {
-  basic: 100,  // up to 10 files, fast scan
-  full: 500,   // full repo analysis
-  live: 1000,  // full analysis + animated diagram export
+  basic: 2000,   // up to 10 files, fast scan
+  full:  10000,  // full repo analysis
+  live:  25000,  // full analysis + animated diagram export
 } as const;
 
 export type Tier = keyof typeof PRICE_SATS;

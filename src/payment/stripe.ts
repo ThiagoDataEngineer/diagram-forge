@@ -10,9 +10,9 @@ import type { Tier } from "./l402.js";
 //   - Enterprise positioning (CFO/CTO audience doesn't haggle over $5)
 // Net after max fees (intl card): basic≈$4.50, full≈$13.50, live≈$32.50
 export const PRICE_USD = {
-  basic: 500,   // $5.00  → net ~$4.55 after fees
-  full:  1500,  // $15.00 → net ~$14.27 after fees
-  live:  3900,  // $39.00 → net ~$37.56 after fees
+  basic: 1200,  // $12.00 → net ~$11.35 after fees
+  full:  2900,  // $29.00 → net ~$27.86 after fees
+  live:  6900,  // $69.00 → net ~$66.70 after fees
 } as const;
 
 const TIER_DESCRIPTIONS: Record<Tier, string> = {

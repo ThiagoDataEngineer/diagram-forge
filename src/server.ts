@@ -169,7 +169,7 @@ app.get("/pricing", (_req, res) => {
       basic: {
         description: "First look — top 10 files, main services detected. Free on first use per IP.",
         lightning_sats: PRICE_SATS.basic,
-        card_usd: "5.00",
+        card_usd: "12.00",
         features: ["Architecture diagram", "Node inspect", "80+ tech logos", "Export SVG/PNG"],
         excludes: ["Benchmark score", "Diff engine", "Persistent share link"],
         first_use: "free",
@@ -177,14 +177,14 @@ app.get("/pricing", (_req, res) => {
       full: {
         description: "Complete repo — all services, connections, monorepos, data pipelines.",
         lightning_sats: PRICE_SATS.full,
-        card_usd: "15.00",
+        card_usd: "29.00",
         features: ["Everything in Basic", "Full codebase scan", "Architecture benchmark (6 dimensions)", "Diff engine (compare snapshots)", "Persistent share link (/g/:id)"],
         excludes: [],
       },
       live: {
         description: "Full analysis + animated particle flows for teams and presentations.",
         lightning_sats: PRICE_SATS.live,
-        card_usd: "39.00",
+        card_usd: "69.00",
         features: ["Everything in Full", "Animated SVG particle flows", "Protocol-colored edges", "Minimap + pan/zoom"],
         excludes: [],
       },

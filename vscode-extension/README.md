@@ -1,8 +1,8 @@
 # Diagram Forge — AI Architecture Diagrams ⚡
 
-> Paste any GitHub URL → Claude analyzes the codebase → interactive architecture diagram in seconds. Pay per use via Lightning Network.
+> Open any GitHub repo in VS Code → Claude analyzes the codebase → interactive architecture diagram in your browser. Pay per use via Lightning Network. First analysis free.
 
-![Diagram Forge Extension Demo](https://raw.githubusercontent.com/shinydapps-creator/diagram-forge/main/vscode-extension/media/demo-extension.gif)
+![Diagram Forge Extension Demo](https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/demo-extension.gif)
 
 ---
 
@@ -27,7 +27,7 @@ The diagram opens in your browser with pan/zoom, node inspection, minimap, and S
 4. **Click "Analyze Repo"**
 5. **Choose your tier** and optionally enter a promo code
 6. **Pay with Lightning** (or use a promo code for free access)
-7. **View your diagram** — opens automatically in the browser
+7. **Click "Open Interactive Diagram"** to view your result in the browser
 
 ---
 
@@ -35,11 +35,19 @@ The diagram opens in your browser with pan/zoom, node inspection, minimap, and S
 
 | Tier | Price | What you get |
 |------|-------|-------------|
-| **Basic** | 100 sats (~$0.10) | Quick scan — top 10 files, main services detected |
-| **Full** | 500 sats (~$0.50) | Complete repo — all services, connections, monorepos |
-| **Live ✦** | 1000 sats (~$1.00) | Full analysis + animated SVG with particle flows |
+| **Basic** | 2,000 sats (~$2) | Quick scan — top files, main services detected, 8 Claude iterations |
+| **Full** | 10,000 sats (~$10) | Complete repo — all services, connections, monorepos, 12 iterations |
+| **Live ✦** | 25,000 sats (~$25) | Deep analysis — full agentic exploration, maximum Claude depth |
 
-Prices in Lightning sats. No subscription, no account — pay per analysis.
+No subscription, no account. Pay per analysis, keep the diagram forever via share link.
+
+---
+
+## Free tier
+
+Every IP gets one free analysis per day — no promo code needed. Just click Analyze and the first request runs at no cost.
+
+**Have a promo code?** Enter it in the "Promo code" field before clicking Analyze. The analysis runs free, no Lightning wallet needed.
 
 ---
 
@@ -52,9 +60,7 @@ Lightning Network is a Bitcoin payment layer that enables instant, near-zero fee
 - **[Phoenix](https://phoenix.acinq.co/)** — mobile, self-custodial
 - **[Alby](https://getalby.com/)** — browser extension, works directly in VS Code
 
-After installing a wallet, fund it with a small amount of Bitcoin and scan the invoice QR when prompted.
-
-**Have a promo code?** Enter it in the "Promo code" field before clicking Analyze — the analysis runs free, no wallet needed.
+Fund it with a small amount of Bitcoin and paste or scan the invoice when prompted. The diagram starts automatically once payment confirms — no button needed.
 
 ---
 
@@ -87,20 +93,26 @@ TypeScript · JavaScript · Python · Java · Go · Rust · Ruby · Scala · Jup
 
 ## Troubleshooting
 
-**"Not Found" error** — Make sure you have the latest version installed. Open the Extensions panel (`Ctrl+Shift+X`), find Diagram Forge, and click Update if available.
+**Analysis takes 30–60 seconds to start** — The server runs on a free Render instance and may be sleeping. The progress bar will begin moving once it wakes up. A 3-minute timeout is in place; if it fires, try again immediately.
 
-**Analysis times out** — Large repos (>1000 files) can take 60–90s on the Full tier. The progress bar updates as Claude explores the codebase.
+**"Access blocked" or "Forbidden" error** — Your corporate network or proxy is blocking the analysis server. Try on a personal network or mobile hotspot. This is a network-level block and cannot be bypassed from within the extension.
 
-**Can't pay with Lightning** — Use a promo code if you have one, or install [Wallet of Satoshi](https://www.walletofsatoshi.com/) to get started with Lightning in under 2 minutes.
+**"Free daily limit reached"** — One free analysis per IP per day. Use a Lightning payment to continue, or wait until midnight UTC.
+
+**"Promo code is invalid or expired"** — Check the code spelling. Leave the field blank to use the standard free trial instead.
+
+**Repo not detected** — If your project doesn't have a GitHub remote, the extension will prompt you to paste a public GitHub URL manually. Private repos are not supported.
+
+**Analysis times out on large repos** — Repos with >1,000 files can take 2–3 minutes on the Full tier. The progress bar advances every ~15 seconds as Claude explores the codebase.
 
 ---
 
 ## Links
 
 - **Web app**: [forge.l402kit.com](https://forge.l402kit.com)
-- **GitHub**: [ShinyDapps/diagram-forge](https://github.com/shinydapps-creator/diagram-forge)
+- **GitHub**: [ThiagoDataEngineer/diagram-forge](https://github.com/ThiagoDataEngineer/diagram-forge)
 - **L402 protocol**: [l402kit.com](https://l402kit.com)
-- **Issues**: [GitHub Issues](https://github.com/shinydapps-creator/diagram-forge/issues)
+- **Issues**: [GitHub Issues](https://github.com/ThiagoDataEngineer/diagram-forge/issues)
 
 ---
 

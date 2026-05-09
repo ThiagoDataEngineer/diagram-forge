@@ -10,17 +10,16 @@ export function getGitHubRemote(root: string): string | undefined {
   const configPath = path.join(root, ".git", "config");
   if (!fs.existsSync(configPath)) return undefined;
   const text = fs.readFileSync(configPath, "utf8");
-  const match = text.match(/url\s*=\s*(.+)/);
-  if (!match) return undefined;
-  const raw = match[1].trim();
-  // normalize SSH → HTTPS
+
+  // Collect all remote URLs, prefer github.com ones
+  const allUrls = [...text.matchAll(/url\s*=\s*(.+)/g)].map(m => m[1].trim());
+  const raw = allUrls.find(u => u.includes("github.com"));
+  if (!raw) return undefined; // non-GitHub remote → trigger manual URL input
+
   if (raw.startsWith("git@github.com:")) {
     return "https://github.com/" + raw.slice("git@github.com:".length).replace(/\.git$/, "");
   }
-  if (raw.includes("github.com")) {
-    return raw.replace(/\.git$/, "");
-  }
-  return raw;
+  return raw.replace(/\.git$/, "");
 }
 
 export function detectRepoInfo(root: string): { repoUrl?: string; repoPath: string } {

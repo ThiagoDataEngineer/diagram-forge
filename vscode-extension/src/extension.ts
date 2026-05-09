@@ -5,9 +5,9 @@ import { detectRepoInfo } from "./git";
 import { analyze, checkPayment, L402Challenge } from "./client";
 
 let sidebar: SidebarProvider;
-let pendingChallenge: L402Challenge | null = null;
 let pendingOpts: { repoUrl?: string; tier: "basic" | "full" | "live"; idemKey: string; promoCode?: string } | null = null;
 let pollTimer: NodeJS.Timeout | null = null;
+let fakeProgressTimer: NodeJS.Timeout | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
   sidebar = new SidebarProvider(context.extensionUri);
@@ -52,7 +52,9 @@ async function cmdAnalyze() {
     return;
   }
 
-  sidebar.setState({ type: "confirming", repoUrl, tier: "basic" });
+  // Restore previous tier so "Retry" / "Analyze another" doesn't reset to basic
+  const previousTier = pendingOpts?.tier ?? "basic";
+  sidebar.setState({ type: "confirming", repoUrl, tier: previousTier });
 }
 
 async function cmdAnalyzeConfirmed() {
@@ -75,30 +77,72 @@ async function doAnalyze(
   promoCode?: string,
 ) {
   sidebar.setState({ type: "analyzing", step: 1, repoUrl });
+  startFakeProgress(repoUrl);
 
-  const result = await analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon, promoCode });
+  try {
+    const result = await withTimeout(
+      analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon, promoCode }),
+      3 * 60 * 1000,
+      "Analysis timed out after 3 minutes. The server may be warming up — try again in 30 seconds."
+    );
 
-  if (result.ok) {
-    stopPoll();
-    sidebar.setState({
-      type: "done",
-      viewerUrl: result.data.viewerUrl,
-      summary: result.data.graph.summary,
-      confidence: result.data.graph.confidence,
-    });
-    // Auto-open
-    await vscode.env.openExternal(vscode.Uri.parse(result.data.viewerUrl));
-    return;
+    if (result.ok) {
+      stopPoll();
+      sidebar.setState({
+        type: "done",
+        viewerUrl: result.data.viewerUrl,
+        summary: result.data.graph.summary,
+        confidence: result.data.graph.confidence,
+      });
+      return;
+    }
+
+    if ("l402" in result) {
+      sidebar.setState({ type: "paying", challenge: result.l402 });
+      startPoll(repoUrl, tier, idemKey, result.l402);
+      return;
+    }
+
+    sidebar.setState({ type: "error", message: friendlyError(result.error) });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    sidebar.setState({ type: "error", message: friendlyError(msg) });
+  } finally {
+    stopFakeProgress();
   }
+}
 
-  if ("l402" in result) {
-    pendingChallenge = result.l402;
-    sidebar.setState({ type: "paying", challenge: result.l402 });
-    startPoll(repoUrl, tier, idemKey, result.l402);
-    return;
-  }
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
 
-  sidebar.setState({ type: "error", message: result.error });
+function friendlyError(msg: string): string {
+  if (msg.includes("invalid_code") || msg.includes("promo")) return "Promo code is invalid or expired. Leave it blank for a free trial.";
+  if (msg.includes("daily_limit") || msg.includes("429")) return "Free daily limit reached. Use a Lightning payment to continue.";
+  if (msg.includes("timed out") || msg.includes("abort")) return msg;
+  if (msg.includes("403") || msg.toLowerCase().includes("forbidden")) return "Access blocked — try on a different network (corporate proxy detected).";
+  if (msg.includes("Failed to fetch") || msg.includes("ECONNREFUSED")) return "Could not reach server. Check your internet connection.";
+  return msg;
+}
+
+function startFakeProgress(repoUrl: string) {
+  stopFakeProgress();
+  let step = 1;
+  // 11 steps × 15 s = ~165 s total fake progress window
+  fakeProgressTimer = setInterval(() => {
+    step = Math.min(step + 1, 11);
+    const current = sidebar.getState();
+    if (current.type === "analyzing") {
+      sidebar.setState({ type: "analyzing", step, repoUrl });
+    }
+  }, 15_000);
+}
+
+function stopFakeProgress() {
+  if (fakeProgressTimer) { clearInterval(fakeProgressTimer); fakeProgressTimer = null; }
 }
 
 async function cmdSubmitPreimage() {
@@ -115,11 +159,9 @@ async function cmdSubmitPreimage() {
   );
 }
 
-function startPoll(repoUrl: string, _tier: string, _idemKey: string, challenge: L402Challenge) {
+function startPoll(_repoUrl: string, _tier: string, _idemKey: string, challenge: L402Challenge) {
   stopPoll();
-  let step = 0;
   pollTimer = setInterval(async () => {
-    // Auto-detect payment via server polling (same as payment.html)
     if (challenge.paymentHash && pendingOpts) {
       const { paid, preimage } = await checkPayment(challenge.paymentHash).catch(() => ({ paid: false, preimage: null }));
       if (paid && preimage) {
@@ -132,13 +174,7 @@ function startPoll(repoUrl: string, _tier: string, _idemKey: string, challenge: 
           challenge.macaroon,
           pendingOpts.promoCode,
         );
-        return;
       }
-    }
-    step = Math.min(step + 1, 11);
-    const current = sidebar.getState();
-    if (current.type === "analyzing") {
-      sidebar.setState({ type: "analyzing", step, repoUrl });
     }
   }, 3000);
 }
@@ -150,7 +186,6 @@ function stopPoll() {
 function cmdOpenBenchmark() {
   const state = sidebar.getState();
   if (state.type === "done") {
-    // Open viewer with #benchmark hash so it auto-opens the benchmark modal
     vscode.env.openExternal(vscode.Uri.parse(state.viewerUrl + "#benchmark"));
   }
 }
@@ -158,7 +193,6 @@ function cmdOpenBenchmark() {
 function cmdOpenDiff() {
   const state = sidebar.getState();
   if (state.type === "done") {
-    // Open viewer with #diff hash so it auto-opens the diff picker
     vscode.env.openExternal(vscode.Uri.parse(state.viewerUrl + "#diff"));
   }
 }
@@ -172,4 +206,5 @@ function cmdOpenLast() {
 
 export function deactivate() {
   stopPoll();
+  stopFakeProgress();
 }

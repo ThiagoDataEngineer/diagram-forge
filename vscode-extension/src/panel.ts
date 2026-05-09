@@ -202,7 +202,8 @@ function render() {
       <div style="margin-top:14px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);line-height:0">
         <img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/docs/demo-viewer.gif"
           alt="Diagram Forge — example output"
-          style="width:100%;height:auto;display:block;opacity:0.85"/>
+          style="width:100%;height:auto;display:block;opacity:0.85"
+          onerror="this.style.display='none'"/>
       </div>
     \`;
   }

@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
+import * as crypto from "crypto";
 import { L402Challenge } from "./client";
 
 type PanelState =
-  | { type: "idle" }
+  | { type: "idle"; githubConnected?: boolean }
   | { type: "detecting" }
   | { type: "confirming"; repoUrl: string; tier: "basic" | "full" | "live"; promoCode?: string }
-  | { type: "paying"; challenge: L402Challenge; preimage?: string }
+  | { type: "paying"; challenge: L402Challenge; preimage?: string; paidConfirmed?: boolean }
   | { type: "analyzing"; step: number; repoUrl: string }
   | { type: "done"; viewerUrl: string; summary: string; confidence: number }
   | { type: "error"; message: string };
@@ -50,6 +51,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.setState({ ...state, promoCode: msg.payload as string });
       } else if (msg.command === "confirm") {
         vscode.commands.executeCommand("diagramForge.analyzeConfirmed");
+      } else if (msg.command === "connectGitHub") {
+        vscode.commands.executeCommand("diagramForge.connectGitHub");
+      } else if (msg.command === "disconnectGitHub") {
+        vscode.commands.executeCommand("diagramForge.disconnectGitHub");
       }
     });
   }
@@ -61,16 +66,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
   getState(): PanelState { return this._state; }
 
+  setGitHubConnected(connected: boolean): void {
+    const current = this._state;
+    if (current.type === "idle") {
+      this.setState({ type: "idle", githubConnected: connected });
+    }
+  }
+
   focus(): void {
     this._view?.show?.(true);
   }
 
   private _buildHtml(): string {
+    const nonce = crypto.randomBytes(16).toString("base64");
     return /* html */`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://raw.githubusercontent.com data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src https://raw.githubusercontent.com data:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -184,8 +197,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 </div>
 <div id="root"></div>
 
-<script>
+<script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 let state = { type: 'idle' };
 
 function render() {
@@ -193,8 +210,17 @@ function render() {
   root.innerHTML = '';
 
   if (state.type === 'idle') {
+    const ghStatus = state.githubConnected
+      ? \`<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#22c55e;margin-bottom:10px">
+          <div class="dot green"></div>GitHub connected
+          <button class="secondary" style="margin-left:auto;width:auto;padding:3px 8px;font-size:10px" onclick="vscode.postMessage({command:'disconnectGitHub'})">Disconnect</button>
+        </div>\`
+      : \`<button class="secondary" style="margin-bottom:10px;font-size:11px" onclick="vscode.postMessage({command:'connectGitHub'})">
+          Connect GitHub (optional)
+        </button>\`;
     root.innerHTML = \`
       <div class="hint" style="margin-bottom:12px">Open a GitHub repo in VS Code, then click <strong>Analyze</strong> to generate an interactive architecture diagram.</div>
+      \${ghStatus}
       <button class="primary" onclick="vscode.postMessage({command:'analyze'})">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="13 2 13 9 20 9"/><path d="M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/></svg>
         Analyze Repo
@@ -229,14 +255,14 @@ function render() {
     root.innerHTML = \`
       <div class="card">
         <div class="label">Repository</div>
-        <div style="font-size:11px;word-break:break-all;margin-bottom:10px">\${state.repoUrl}</div>
+        <div style="font-size:11px;word-break:break-all;margin-bottom:10px">\${escapeHtml(state.repoUrl)}</div>
         <div class="label">Analysis tier</div>
         <div class="tier-group">\${tierBtns}</div>
         <div class="label" style="margin-top:8px">Promo code (optional)</div>
         <input
           type="text" id="promo-input"
           placeholder="e.g. PRIMAL"
-          value="\${state.promoCode ?? ''}"
+          value="\${escapeHtml(state.promoCode ?? '')}"
           oninput="vscode.postMessage({command:'promoChange',payload:this.value.trim().toUpperCase()})"
           style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:11px;font-family:monospace;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px;box-sizing:border-box;"
         />
@@ -251,31 +277,53 @@ function render() {
     const c = state.challenge;
     const preimage = state.preimage ?? '';
     const canSubmit = preimage.length === 64;
-    root.innerHTML = \`
-      <div class="card">
-        <div class="status-row"><div class="dot purple"></div><span>Waiting for payment…</span></div>
-        <div class="amount-badge">⚡ \${c.amountSats} sats — \${c.tier}</div>
-        <div class="label">Lightning invoice</div>
-        <div class="invoice-box">\${c.invoice}</div>
-        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:10px">
-          Copy Invoice
-        </button>
-        <div class="hint" style="margin-bottom:10px">Pay with any Lightning wallet — the diagram will start automatically once payment confirms.</div>
+    const confirmed = state.paidConfirmed ?? false;
+
+    // When payment is confirmed but preimage not returned by server, show input prominently
+    const preimageSection = confirmed
+      ? \`<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:10px;margin-bottom:8px">
+          <div class="status-row" style="margin-bottom:8px"><div class="dot green"></div><span style="font-weight:700;color:#22c55e">Payment confirmed!</span></div>
+          <div class="hint" style="margin-bottom:8px">Your wallet received a <strong>payment proof (preimage)</strong> — paste the 64-character hex below to start the analysis.</div>
+          <input
+            type="text" id="preimage-input"
+            placeholder="64-char hex preimage from your wallet"
+            value="\${escapeHtml(preimage)}"
+            oninput="onPreimageInput(this.value)"
+            autofocus
+            style="width:100%;padding:6px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid rgba(34,197,94,.4);border-radius:5px;font-size:10px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;"
+          />
+          <button class="primary" \${canSubmit ? '' : 'disabled'} onclick="vscode.postMessage({command:'submitPreimage'})">
+            Submit &amp; Generate Diagram
+          </button>
+        </div>\`
+      : \`<div class="hint" style="margin-bottom:10px">Pay with any Lightning wallet — the diagram will start automatically once payment confirms.</div>
         <details style="margin-top:4px">
           <summary style="font-size:10px;color:var(--vscode-descriptionForeground);cursor:pointer;user-select:none">Paid but nothing happened? Enter preimage manually</summary>
           <div style="margin-top:8px">
             <input
               type="text" id="preimage-input"
               placeholder="64-char hex preimage"
-              value="\${preimage}"
+              value="\${escapeHtml(preimage)}"
               oninput="onPreimageInput(this.value)"
               style="width:100%;padding:5px 8px;background:var(--vscode-editor-background);color:var(--vscode-foreground);border:1px solid var(--vscode-panel-border,#444);border-radius:5px;font-size:10px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;"
             />
             <button class="primary" \${canSubmit ? '' : 'disabled'} onclick="vscode.postMessage({command:'submitPreimage'})">
-              ⚡ Submit &amp; Generate Diagram
+              Submit &amp; Generate Diagram
             </button>
           </div>
-        </details>
+        </details>\`;
+
+    root.innerHTML = \`
+      <div class="card">
+        <div class="status-row"><div class="dot \${confirmed ? 'green' : 'purple'}"></div><span>\${confirmed ? 'Payment received' : 'Waiting for payment…'}</span></div>
+        <div class="amount-badge">⚡ \${escapeHtml(String(c.amountSats))} sats — \${escapeHtml(c.tier)}</div>
+        \${confirmed ? '' : \`
+        <div class="label">Lightning invoice</div>
+        <div class="invoice-box">\${escapeHtml(c.invoice)}</div>
+        <button class="primary" onclick="vscode.postMessage({command:'copyInvoice'})" style="margin-bottom:10px">
+          Copy Invoice
+        </button>\`}
+        \${preimageSection}
       </div>
     \`;
   }
@@ -295,7 +343,7 @@ function render() {
     root.innerHTML = \`
       <div class="card" style="border-color:rgba(34,197,94,.3)">
         <div class="status-row"><div class="dot green"></div><span style="font-weight:700">Diagram ready</span></div>
-        <div class="summary-text">\${state.summary}</div>
+        <div class="summary-text">\${escapeHtml(state.summary)}</div>
         <div class="confidence">Confidence: <span>\${Math.round(state.confidence * 100)}%</span></div>
         <button class="primary" style="margin-top:10px" onclick="vscode.postMessage({command:'openViewer'})">
           Open Interactive Diagram ↗
@@ -317,7 +365,7 @@ function render() {
     root.innerHTML = \`
       <div class="card" style="border-color:rgba(239,68,68,.3)">
         <div class="status-row"><div class="dot red"></div><span style="font-weight:700">Error</span></div>
-        <div class="hint" style="margin:8px 0;color:#ef4444">\${state.message}</div>
+        <div class="hint" style="margin:8px 0;color:#ef4444">\${escapeHtml(state.message)}</div>
         <button class="primary" onclick="vscode.postMessage({command:'analyze'})">Retry</button>
       </div>
     \`;

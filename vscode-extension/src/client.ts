@@ -7,6 +7,7 @@ export interface AnalyzeOpts {
   idempotencyKey?: string;
   preimage?: string;
   macaroon?: string;
+  onProgress?: (event: StreamEvent) => void;
 }
 
 export interface Graph {
@@ -29,6 +30,21 @@ export interface AnalyzeOk {
   id: string;
   graph: Graph;
   viewerUrl: string;
+}
+
+export interface StreamEvent {
+  type: "progress" | "tool_call" | "complete" | "error" | "result";
+  iteration?: number;
+  max_iterations?: number;
+  tool_name?: string;
+  file_path?: string;
+  message?: string;
+  elapsed_ms?: number;
+  graph?: Graph;
+  // result event fields (type === "result")
+  ok?: boolean;
+  id?: string;
+  viewerUrl?: string;
 }
 
 type AnalyzeResult =
@@ -55,8 +71,6 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     const mac = wwwAuth.match(/macaroon="([^"]+)"/)?.[1] ?? "";
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
 
-    // Extract payment hash from macaroon (base64 JSON: { hash, exp })
-    // The 402 body has `priceSats` not `amount_sats`, and no `payment_hash` field.
     let paymentHash = (body.payment_hash as string) ?? "";
     if (!paymentHash && mac) {
       try {
@@ -83,12 +97,65 @@ export async function analyze(opts: AnalyzeOpts): Promise<AnalyzeResult> {
     return { ok: false, error: `${res.status}: ${msg}` };
   }
 
-  const body = await res.json() as { id?: string; graph?: Graph };
+  // SSE stream — read events until we get the "result" event
+  if (res.headers.get("content-type")?.includes("text/event-stream")) {
+    return readSseStream(res, opts.onProgress);
+  }
+
+  // Fallback: plain JSON (cached response or old server)
+  const body = await res.json() as { id?: string; graph?: Graph; viewerUrl?: string };
   const id = body.id ?? "";
   return {
     ok: true,
-    data: { id, graph: body.graph!, viewerUrl: `${SERVER}/g/${id}` },
+    data: { id, graph: body.graph!, viewerUrl: body.viewerUrl ?? `${SERVER}/g/${id}` },
   };
+}
+
+async function readSseStream(
+  res: Response,
+  onProgress?: (event: StreamEvent) => void,
+): Promise<AnalyzeResult> {
+  if (!res.body) return { ok: false, error: "Empty response body" };
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        let event: StreamEvent;
+        try {
+          event = JSON.parse(line.slice(6)) as StreamEvent;
+        } catch {
+          continue;
+        }
+
+        if (event.type === "result" && event.ok) {
+          return {
+            ok: true,
+            data: { id: event.id ?? "", graph: event.graph!, viewerUrl: event.viewerUrl ?? "" },
+          };
+        }
+        if (event.type === "error") {
+          return { ok: false, error: event.message ?? "Analysis failed" };
+        }
+        onProgress?.(event);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return { ok: false, error: "Stream ended without result" };
 }
 
 export async function checkPayment(paymentHash: string): Promise<{ paid: boolean; preimage: string | null }> {

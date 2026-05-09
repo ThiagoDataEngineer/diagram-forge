@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ShinyDapps/diagram-forge/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7C3AED" alt="License"/></a>
+  <a href="https://github.com/ThiagoDataEngineer/diagram-forge/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7C3AED" alt="License"/></a>
   <img src="https://img.shields.io/badge/powered_by-Claude_AI-A855F7" alt="Claude AI"/>
   <img src="https://img.shields.io/badge/payments-Lightning_L402-F59E0B" alt="Lightning L402"/>
   <img src="https://img.shields.io/badge/polyglot-15%2B_stacks-22C55E" alt="Polyglot"/>
@@ -90,13 +90,13 @@ Payment via **Lightning Network** (L402 protocol). Any wallet: Alby, Phoenix, Wa
 ### Use online
 
 ```
-https://diagram-forge.dev
+https://forge.l402kit.com
 ```
 
 ### Run locally
 
 ```bash
-git clone https://github.com/ShinyDapps/diagram-forge
+git clone https://github.com/ThiagoDataEngineer/diagram-forge
 cd diagram-forge
 npm install
 
@@ -213,7 +213,7 @@ curl "http://your-server/api/diff?a=v1.json&b=v2.json&format=markdown"
 
 ## License
 
-MIT · Built by [ShinyDapps](https://shinydapps.com)
+MIT · Built by ShinyDapps
 
 ---
 

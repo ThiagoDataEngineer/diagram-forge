@@ -2,7 +2,10 @@ import * as vscode from "vscode";
 import * as crypto from "crypto";
 import { SidebarProvider } from "./panel";
 import { detectRepoInfo } from "./git";
-import { analyze, checkPayment, L402Challenge } from "./client";
+import { analyze, checkPayment, L402Challenge, StreamEvent } from "./client";
+
+const SERVER = "https://diagram-forge.onrender.com";
+const GITHUB_TOKEN_KEY = "githubToken";
 
 let sidebar: SidebarProvider;
 let pendingOpts: { repoUrl?: string; tier: "basic" | "full" | "live"; idemKey: string; promoCode?: string } | null = null;
@@ -24,8 +27,25 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("diagramForge.submitPreimage", cmdSubmitPreimage),
     vscode.commands.registerCommand("diagramForge.openBenchmark", cmdOpenBenchmark),
     vscode.commands.registerCommand("diagramForge.openDiff", cmdOpenDiff),
-    vscode.commands.registerCommand("diagramForge.openLast", cmdOpenLast)
+    vscode.commands.registerCommand("diagramForge.openLast", cmdOpenLast),
+    vscode.commands.registerCommand("diagramForge.connectGitHub", () => cmdConnectGitHub(context)),
+    vscode.commands.registerCommand("diagramForge.disconnectGitHub", () => cmdDisconnectGitHub(context)),
   );
+
+  // URI handler — receives vscode://ShinyDapps.diagram-forge/auth/github?token=xxx
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      handleUri(uri: vscode.Uri): void {
+        // fire-and-forget: never block the URI handler with await
+        void handleOAuthCallback(uri, context);
+      },
+    })
+  );
+
+  // Restore GitHub connection status in panel on activation
+  void context.secrets.get(GITHUB_TOKEN_KEY).then((token) => {
+    if (token) sidebar.setGitHubConnected(true);
+  });
 }
 
 async function cmdAnalyze() {
@@ -77,11 +97,24 @@ async function doAnalyze(
   promoCode?: string,
 ) {
   sidebar.setState({ type: "analyzing", step: 1, repoUrl });
+
+  let sseStep = 1;
+  const onSseProgress = (event: StreamEvent) => {
+    if (event.type === "tool_call" || event.type === "progress") {
+      sseStep = Math.min((event.iteration ?? sseStep) + 1, 11);
+      const current = sidebar.getState();
+      if (current.type === "analyzing") {
+        sidebar.setState({ type: "analyzing", step: sseStep, repoUrl: repoUrl ?? "" });
+      }
+    }
+  };
+
+  // Start fake progress only as fallback for servers that don't stream
   startFakeProgress(repoUrl);
 
   try {
     const result = await withTimeout(
-      analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon, promoCode }),
+      analyze({ repoUrl, tier, idempotencyKey: idemKey, preimage, macaroon, promoCode, onProgress: onSseProgress }),
       3 * 60 * 1000,
       "Analysis timed out after 3 minutes. The server may be warming up — try again in 30 seconds."
     );
@@ -165,6 +198,7 @@ function startPoll(_repoUrl: string, _tier: string, _idemKey: string, challenge:
     if (challenge.paymentHash && pendingOpts) {
       const { paid, preimage } = await checkPayment(challenge.paymentHash).catch(() => ({ paid: false, preimage: null }));
       if (paid && preimage) {
+        // Dev/mock mode: server returned preimage — auto-continue
         stopPoll();
         await doAnalyze(
           pendingOpts.repoUrl!,
@@ -174,6 +208,14 @@ function startPoll(_repoUrl: string, _tier: string, _idemKey: string, challenge:
           challenge.macaroon,
           pendingOpts.promoCode,
         );
+      } else if (paid && !preimage) {
+        // Production Lightning: server confirmed paid but won't return preimage.
+        // Surface the preimage input prominently so the user can paste it from their wallet.
+        stopPoll();
+        const cur = sidebar.getState();
+        if (cur.type === "paying") {
+          sidebar.setState({ ...cur, paidConfirmed: true });
+        }
       }
     }
   }, 3000);
@@ -202,6 +244,34 @@ function cmdOpenLast() {
   if (state.type === "done") {
     vscode.env.openExternal(vscode.Uri.parse(state.viewerUrl));
   }
+}
+
+async function cmdConnectGitHub(context: vscode.ExtensionContext): Promise<void> {
+  const existing = await context.secrets.get(GITHUB_TOKEN_KEY);
+  if (existing) {
+    vscode.window.showInformationMessage("GitHub already connected. Use 'Diagram Forge: Disconnect GitHub' to unlink.");
+    return;
+  }
+  await vscode.env.openExternal(vscode.Uri.parse(`${SERVER}/auth/github/vscode`));
+}
+
+async function cmdDisconnectGitHub(context: vscode.ExtensionContext): Promise<void> {
+  await context.secrets.delete(GITHUB_TOKEN_KEY);
+  sidebar.setGitHubConnected(false);
+  vscode.window.showInformationMessage("GitHub account disconnected.");
+}
+
+async function handleOAuthCallback(uri: vscode.Uri, context: vscode.ExtensionContext): Promise<void> {
+  if (uri.path !== "/auth/github") return;
+  const params = new URLSearchParams(uri.query);
+  const token = params.get("token");
+  if (!token) {
+    vscode.window.showErrorMessage("GitHub auth failed — no token in callback.");
+    return;
+  }
+  await context.secrets.store(GITHUB_TOKEN_KEY, token);
+  sidebar.setGitHubConnected(true);
+  vscode.window.showInformationMessage("✓ GitHub connected — public repos unlocked.");
 }
 
 export function deactivate() {

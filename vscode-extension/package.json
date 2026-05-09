@@ -2,14 +2,14 @@
   "name": "diagram-forge",
   "displayName": "Diagram Forge",
   "description": "AI-generated architecture diagrams from your repo — powered by Claude, paid via Lightning ⚡",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "publisher": "ShinyDapps",
   "icon": "icon.png",
   "repository": { "type": "git", "url": "https://github.com/shinydapps-creator/diagram-forge" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Visualization", "Other"],
   "keywords": ["architecture", "diagram", "AI", "lightning", "bitcoin"],
-  "activationEvents": [],
+  "activationEvents": ["onUri"],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -39,6 +39,14 @@
       {
         "command": "diagramForge.openLast",
         "title": "Diagram Forge: Open Last Diagram"
+      },
+      {
+        "command": "diagramForge.connectGitHub",
+        "title": "Diagram Forge: Connect GitHub Account"
+      },
+      {
+        "command": "diagramForge.disconnectGitHub",
+        "title": "Diagram Forge: Disconnect GitHub Account"
       }
     ],
     "menus": {

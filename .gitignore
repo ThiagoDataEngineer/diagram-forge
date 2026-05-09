@@ -34,4 +34,9 @@ response.json
 # VSCode extension build output
 vscode-extension/out/
 vscode-extension/node_modules/
+vscode-extension/*.vsix
 .claude/
+
+# Cache e Python
+data/cache/
+scripts/__pycache__/

@@ -67,11 +67,23 @@ export interface ArchitectureGraph {
   analysis_steps: number;
 }
 
+export interface ProgressEvent {
+  type: "progress" | "tool_call" | "complete" | "error";
+  iteration?: number;
+  max_iterations?: number;
+  tool_name?: string;
+  file_path?: string;
+  message: string;
+  elapsed_ms?: number;
+  graph?: ArchitectureGraph;
+}
+
 export interface AnalyzerOptions {
   apiKey?: string;
   model?: string;
   maxIterations?: number;
   onProgress?: (message: string) => void;
+  onProgressEvent?: (event: ProgressEvent) => void;
   tier?: "basic" | "full" | "live";
   onTokenUsage?: (inputTokens: number, outputTokens: number) => void;
 }
@@ -156,6 +168,7 @@ export async function analyzeProject(
     model = DEFAULT_MODEL,
     maxIterations = TIER_MAX_ITER[tier] ?? 12,
     onProgress,
+    onProgressEvent,
     onTokenUsage,
   } = options;
 
@@ -170,7 +183,12 @@ export async function analyzeProject(
     else console.log(`[analyzer] ${msg}`);
   };
 
+  const emit = (event: ProgressEvent) => {
+    onProgressEvent?.(event);
+  };
+
   log(`Starting analysis of: ${projectRoot}`);
+  emit({ type: "progress", message: `Starting analysis`, elapsed_ms: 0, max_iterations: maxIterations });
 
   const messages: Anthropic.MessageParam[] = [
     {
@@ -251,6 +269,15 @@ Start with detect_entry_points, then explore as needed. Call finish_analysis whe
       const { name, id, input } = block;
       const inp = input as Record<string, unknown>;
       log(`→ ${name}(${JSON.stringify(inp)})`);
+      emit({
+        type: "tool_call",
+        iteration: iterations,
+        max_iterations: maxIterations,
+        tool_name: name,
+        file_path: typeof inp.path === "string" ? inp.path : undefined,
+        message: `${name}(${typeof inp.path === "string" ? inp.path : typeof inp.pattern === "string" ? inp.pattern : ""})`,
+        elapsed_ms: Date.now() - startTime,
+      });
 
       let result: string;
 
@@ -306,6 +333,14 @@ Start with detect_entry_points, then explore as needed. Call finish_analysis whe
           log(
             `✓ Analysis complete — ${finalGraph.nodes.length} nodes, ${finalGraph.edges.length} edges (confidence: ${(finalGraph.confidence * 100).toFixed(0)}%)`
           );
+          emit({
+            type: "complete",
+            iteration: iterations,
+            max_iterations: maxIterations,
+            message: `Analysis complete — ${finalGraph.nodes.length} nodes, ${finalGraph.edges.length} edges`,
+            elapsed_ms: Date.now() - startTime,
+            graph: finalGraph,
+          });
           result = "Analysis saved successfully.";
           break;
         }

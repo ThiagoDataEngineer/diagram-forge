@@ -281,7 +281,7 @@ app.post(
     // If already authenticated via Stripe, promo, cache-bypass, or trial, skip L402 gate
     if ((req as AuthedRequest).l402) return next();
     const tier = (req.body?.tier as "basic" | "full" | "live") ?? "full";
-    if (isProductionLightning() || process.env.LIGHTNING_ADDRESS) {
+    if (isProductionLightning()) {
       return kitL402({ priceSats: PRICE_SATS[tier], lightning: managedProvider })(req, res, next);
     }
     return mockL402({ lightning, tier, memo: "Diagram Forge — repo analysis" })(req, res, next);
@@ -400,9 +400,21 @@ app.post(
 
       log.info({ absPath, tier }, "starting analysis");
 
+      // ── SSE: open stream before the agent loop starts ─────────────────────
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no"); // disable nginx/Fly.io proxy buffering
+      res.flushHeaders();
+
+      const sseWrite = (payload: unknown) => {
+        try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* client disconnected */ }
+      };
+
       const graph = await analyzeProject(absPath, {
         tier,
         onProgress: (msg) => log.info(msg),
+        onProgressEvent: sseWrite,
         onTokenUsage: (inTok, outTok) => {
           analyzeTokensIn.inc(inTok);
           analyzeTokensOut.inc(outTok);
@@ -420,22 +432,29 @@ app.post(
       };
       const viewId = crypto.randomBytes(4).toString("hex");
       await saveShare(viewId, { ...graph, _shared_at: new Date().toISOString() }).catch(() => {});
-      const result = { ok: true, id: viewId, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures };
+      const result = { ok: true, id: viewId, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures, viewerUrl: `/view?file=${viewId}` };
       if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
       timer({ status: "success" });
       analyzeRequests.inc({ status: "success", tier });
       track("analyze_completed", { tier, ip: req.ip, repoUrl: repo_url, meta: { nodes: graph.nodes.length, edges: graph.edges.length } });
-      res.json(result);
+      sseWrite({ type: "result", ...result });
+      res.end();
     } catch (err) {
       log.error({ err }, "analysis error");
       timer({ status: "error" });
       analyzeRequests.inc({ status: "error", tier });
       track("analyze_error", { tier, ip: req.ip, repoUrl: repo_url });
       if (idemStoreKey) await deleteIdem(idemStoreKey); // allow retry on error
-      res.status(500).json({
-        error: "analysis_failed",
-        message: err instanceof Error ? err.message : String(err),
-      });
+      // If SSE headers already sent, send error as SSE event; otherwise fall back to JSON
+      if (res.headersSent) {
+        try { res.write(`data: ${JSON.stringify({ type: "error", message: err instanceof Error ? err.message : String(err) })}\n\n`); } catch { /* ignore */ }
+        res.end();
+      } else {
+        res.status(500).json({
+          error: "analysis_failed",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     } finally {
       cloneCleanup?.();
     }
@@ -448,7 +467,7 @@ app.post(
 app.post(
   "/diagram",
   (req: AuthedRequest, res, next) => {
-    if (isProductionLightning() || process.env.LIGHTNING_ADDRESS) {
+    if (isProductionLightning()) {
       return kitL402({ priceSats: PRICE_SATS.live, lightning: managedProvider })(req, res, next);
     }
     return mockL402({ lightning, tier: "live", memo: "Diagram Forge — SVG render" })(req, res, next);
@@ -1268,9 +1287,12 @@ const GITHUB_REDIRECT_URI  = process.env.GITHUB_REDIRECT_URI  ?? "https://diagra
 
 // CSRF protection: store valid states for 10 minutes
 const oauthStateStore = new Map<string, number>();
+// VS Code-initiated OAuth states — these redirect to vscode:// instead of the web popup
+const vsCodeOauthStates = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
   for (const [s, exp] of oauthStateStore) if (exp < now) oauthStateStore.delete(s);
+  for (const [s, exp] of vsCodeOauthStates) if (exp < now) vsCodeOauthStates.delete(s);
 }, 60_000).unref();
 
 app.get("/auth/github", (_req, res) => {
@@ -1283,7 +1305,24 @@ app.get("/auth/github", (_req, res) => {
   const params = new URLSearchParams({
     client_id:    GITHUB_CLIENT_ID,
     redirect_uri: GITHUB_REDIRECT_URI,
-    scope:        "repo",
+    scope:        "public_repo",
+    state,
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+});
+
+// VS Code extension OAuth entry point — redirects back to vscode:// URI after auth
+app.get("/auth/github/vscode", (_req, res) => {
+  if (!GITHUB_CLIENT_ID) {
+    res.status(503).json({ error: "GitHub OAuth not configured" });
+    return;
+  }
+  const state = crypto.randomBytes(16).toString("hex");
+  vsCodeOauthStates.set(state, Date.now() + 10 * 60 * 1000);
+  const params = new URLSearchParams({
+    client_id:    GITHUB_CLIENT_ID,
+    redirect_uri: GITHUB_REDIRECT_URI,
+    scope:        "public_repo",
     state,
   });
   res.redirect(`https://github.com/login/oauth/authorize?${params}`);
@@ -1325,6 +1364,13 @@ app.get("/auth/github/callback", async (req, res) => {
 
     if (!tokenData.access_token) {
       res.redirect(`/?gh_error=${encodeURIComponent(tokenData.error ?? "token_exchange_failed")}`);
+      return;
+    }
+
+    // VS Code extension flow: redirect back to vscode:// URI with the token
+    if (vsCodeOauthStates.has(state!)) {
+      vsCodeOauthStates.delete(state!);
+      res.redirect(`vscode://ShinyDapps.diagram-forge/auth/github?token=${encodeURIComponent(tokenData.access_token)}`);
       return;
     }
 

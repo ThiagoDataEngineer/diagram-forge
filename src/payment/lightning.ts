@@ -231,6 +231,7 @@ export class BlinkBackend implements LightningBackend {
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export function isProductionLightning(): boolean {
+  if (process.env.TEST_MOCK_LIGHTNING === "true") return false;
   return !!(
     process.env.LIGHTNING_ADDRESS ||
     (process.env.BLINK_API_KEY && process.env.BLINK_WALLET_ID) ||

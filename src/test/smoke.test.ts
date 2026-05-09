@@ -281,6 +281,7 @@ describe("POST /analyze — promo code gate", () => {
     const { status } = await post("/analyze", {
       repo_url: "https://github.com/test/repo",
       promo_code: "",
+      tier: "full", // full tier has no free trial → guaranteed to hit L402 gate
     });
     // Empty string → no promo path triggered → normal 402
     expect(status).toBe(402);
@@ -290,15 +291,16 @@ describe("POST /analyze — promo code gate", () => {
 // ── GitHub OAuth (L-2) ───────────────────────────────────────────────────────
 
 describe("GET /auth/github", () => {
-  it("returns 302 to github.com, 503 if not configured, or 404 if route not registered", async () => {
+  it("redirects to github.com with public_repo scope, or 503 when not configured", async () => {
     const r = await fetch(`${BASE}/auth/github`, { redirect: "manual" });
-    // 302 → OAuth configured, redirect to github.com
-    // 503 → GITHUB_CLIENT_ID not set in test env (valid, expected in CI)
-    // 404 → route not yet deployed in this server version
-    expect([302, 503, 404]).toContain(r.status);
+    // 302 → OAuth configured; 503 → GITHUB_CLIENT_ID not set in this env (expected in CI)
+    // 404 is NOT acceptable — it means the route is unregistered
+    expect([302, 503]).toContain(r.status);
     if (r.status === 302) {
       const loc = r.headers.get("location") ?? "";
       expect(loc).toContain("github.com/login/oauth/authorize");
+      expect(loc).toContain("scope=public_repo");
+      expect(loc).not.toContain("scope=repo");
     }
   });
 });
@@ -307,12 +309,13 @@ describe("GET /auth/github", () => {
 
 describe("POST /analyze", () => {
   it("returns 402 Payment Required (L402 gate active)", async () => {
-    const { status } = await post("/analyze", { repo_url: "https://github.com/test/repo" });
+    // tier: "full" skips the free-trial bypass (trial only applies to basic tier)
+    const { status } = await post("/analyze", { repo_url: "https://github.com/test/repo", tier: "full" });
     expect(status).toBe(402);
   });
 
   it("402 body includes payment info (mock or managed L402 format)", async () => {
-    const { body } = await post("/analyze", { repo_url: "https://github.com/test/repo" });
+    const { body } = await post("/analyze", { repo_url: "https://github.com/test/repo", tier: "full" });
     // Mock mode: { invoice, payment_hash, amount_sats, ... }
     // Managed provider (kitL402): { error: 'Payment Required', invoice?, ... }
     // Both must include at minimum an invoice field or error indicating payment needed

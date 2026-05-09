@@ -183,6 +183,18 @@ app.get("/pricing", (_req, res) => {
   });
 });
 
+// Saves graph to Supabase and, as a fallback, to the local GRAPHS_DIR so that
+// /api/diff and /g/:id can resolve the file even when Supabase is not configured.
+async function persistShare(viewId: string, graph: Record<string, unknown>): Promise<void> {
+  const payload = { ...graph, _shared_at: new Date().toISOString() };
+  await saveShare(viewId, payload as Parameters<typeof saveShare>[1]).catch(() => {});
+  // Local fallback — always write so resolveGraphFile() can find it for /api/diff
+  try {
+    fs.mkdirSync(GRAPHS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(GRAPHS_DIR, `${viewId}.json`), JSON.stringify(payload), "utf-8");
+  } catch { /* non-critical */ }
+}
+
 // ─── POST /analyze — main paid endpoint ───────────────────────────────────────
 // Body: { repo_path?: string, repo_url?: string, tier?: "basic"|"full"|"live" }
 // Without payment → 402. With valid L402 → runs Claude agent.
@@ -356,7 +368,7 @@ app.post(
       // P-3: if cache-bypass middleware already found the cached graph, return immediately
       if (req._prefetchedGraph) {
         const viewId = crypto.randomBytes(4).toString("hex");
-        await saveShare(viewId, { ...req._prefetchedGraph, _shared_at: new Date().toISOString() }).catch(() => {});
+        await persistShare(viewId, req._prefetchedGraph);
         const result = { ok: true, id: viewId, tier, graph: req._prefetchedGraph, paid_sats: 0, cached: true };
         if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
         timer({ status: "cached" });
@@ -376,7 +388,7 @@ app.post(
         if (cached) {
           log.info({ identifier, sha: sha.slice(0, 8) }, "cache hit");
           const viewId = crypto.randomBytes(4).toString("hex");
-          await saveShare(viewId, { ...cached, _shared_at: new Date().toISOString() }).catch(() => {});
+          await persistShare(viewId, cached);
           const result = { ok: true, id: viewId, tier, graph: cached, paid_sats: PRICE_SATS[tier], cached: true };
           if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
           timer({ status: "cached" });
@@ -431,7 +443,7 @@ app.post(
         animated: tier === "live",
       };
       const viewId = crypto.randomBytes(4).toString("hex");
-      await saveShare(viewId, { ...graph, _shared_at: new Date().toISOString() }).catch(() => {});
+      await persistShare(viewId, graph as Record<string, unknown>);
       const result = { ok: true, id: viewId, tier, graph, paid_sats: PRICE_SATS[tier], tier_features: tierFeatures, viewerUrl: `/view?file=${viewId}` };
       if (idemStoreKey) await setIdemDone(idemStoreKey, result, Date.now() + IDEM_TTL_MS);
       timer({ status: "success" });

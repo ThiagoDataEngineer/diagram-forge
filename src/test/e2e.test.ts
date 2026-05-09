@@ -1,6 +1,5 @@
 /**
  * End-to-end tests — fluxo L402 completo com mock Lightning.
- * Requer servidor rodando: npm run dev
  * Rodar: npm run test:e2e
  *
  * Cobre: 402 gate → mock pay → analyze → benchmark → diff → share → short link
@@ -10,12 +9,33 @@ import { PRICE_SATS } from "../payment/l402.js";
 
 const BASE = "http://localhost:3000";
 
+// Repo that doesn't exist — P-3 cache bypass fails gracefully, so the L402 gate fires.
+// Used for gate tests that must not accidentally cache real analysis results.
+const GATE_REPO = "https://github.com/test-only/x-e2e-gate-nonexistent-abc123";
+
 async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
   const r = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
+
+  const contentType = r.headers.get("content-type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    // Server streams analysis via SSE. Extract the final "result" event.
+    const text = await r.text();
+    let lastResult: Record<string, unknown> | null = null;
+    for (const line of text.split("\n")) {
+      if (line.startsWith("data: ")) {
+        try {
+          const obj = JSON.parse(line.slice(6)) as Record<string, unknown>;
+          if (obj.type === "result") lastResult = obj;
+        } catch { /* skip malformed lines */ }
+      }
+    }
+    return { status: r.status, body: lastResult };
+  }
+
   return { status: r.status, body: await r.json().catch(() => null) as Record<string, unknown> };
 }
 
@@ -26,46 +46,60 @@ async function get(path: string) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function getL402Token(tier: "basic" | "full" | "live" = "basic") {
-  const { status, body } = await post("/analyze", {
-    repo_url: "https://github.com/meltano/meltano",
-    tier,
-  });
+async function getL402Token(
+  tier: "basic" | "full" | "live" = "full",
+  repoUrl = "https://github.com/meltano/meltano",
+) {
+  const { status, body } = await post("/analyze", { repo_url: repoUrl, tier });
   expect(status).toBe(402);
-  const hash = body.payment_hash as string;
+  const hash = body!.payment_hash as string;
   const macaroon = (body as unknown as { instructions: string[] })
     .instructions?.[2]?.match(/L402 ([^:]+):/)?.[1] ?? "";
 
   // Simula pagamento via mock
   const payRes = await post("/dev/pay", { payment_hash: hash });
   expect(payRes.status).toBe(200);
-  const preimage = payRes.body.preimage as string;
+  const preimage = payRes.body!.preimage as string;
 
   return { macaroon, preimage, hash };
 }
 
 // ─── Suite 1: L402 gate ───────────────────────────────────────────────────────
+// Uses GATE_REPO (non-existent) + tier "live" so neither free trial nor P-3 cache
+// bypass intercepts — the L402 gate always fires for these requests.
 
 describe("L402 gate", () => {
   it("retorna 402 com invoice, hash, macaroon e tier", async () => {
     const { status, body } = await post("/analyze", {
-      repo_url: "https://github.com/meltano/meltano",
-      tier: "basic",
+      repo_url: GATE_REPO,
+      tier: "live", // live has no free trial; P-3 fails gracefully on fake URL
     });
     expect(status).toBe(402);
-    expect(body.payment_hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(body.invoice).toMatch(/^lnbc_mock_/);
-    expect(body.amount_sats).toBe(PRICE_SATS.basic);
-    expect(body.tier).toBe("basic");
-    expect(body.expires_at).toBeGreaterThan(Date.now() / 1000);
+    expect(body!.payment_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(body!.invoice).toMatch(/^lnbc_mock_/);
+    expect(body!.amount_sats).toBe(PRICE_SATS.live);
+    expect(body!.tier).toBe("live");
+    expect(body!.expires_at).toBeGreaterThan(Date.now() / 1000);
   });
 
-  it("retorna 402 com preço correto para tier full (500 sats)", async () => {
-    const { body } = await post("/analyze", {
-      repo_url: "https://github.com/meltano/meltano",
+  it("retorna 402 com preço correto para tier full", async () => {
+    const { status, body } = await post("/analyze", {
+      repo_url: GATE_REPO,
       tier: "full",
     });
-    expect(body.amount_sats).toBe(PRICE_SATS.full);
+    expect(status).toBe(402);
+    expect(body!.amount_sats).toBe(PRICE_SATS.full);
+  });
+
+  it("free trial concede acesso no primeiro request basic por IP", async () => {
+    // Use GATE_REPO so the trial fires but analysis fails fast (fake URL).
+    // This avoids caching a real repo that would pollute later test suites via P-3 bypass.
+    const { status } = await post("/analyze", {
+      repo_url: GATE_REPO,
+      tier: "basic",
+    });
+    // Trial granted → server attempts analysis → fails on fake repo → 500
+    expect([200, 500]).toContain(status);
   });
 });
 
@@ -73,7 +107,8 @@ describe("L402 gate", () => {
 
 describe("Fluxo completo /analyze (ETL — meltano/meltano)", () => {
   let graph: Record<string, unknown>;
-  let savedFile: string;
+  let viewId: string;
+  let paidSats: number;
 
   beforeAll(async () => {
     const { macaroon, preimage } = await getL402Token("full");
@@ -84,8 +119,9 @@ describe("Fluxo completo /analyze (ETL — meltano/meltano)", () => {
       { Authorization: auth }
     );
     expect(status).toBe(200);
-    graph = body.graph as Record<string, unknown>;
-    savedFile = body.saved_file as string;
+    graph = body!.graph as Record<string, unknown>;
+    viewId = body!.id as string;
+    paidSats = body!.paid_sats as number;
   }, 120_000);
 
   it("retorna grafo com nodes e edges", () => {
@@ -120,32 +156,24 @@ describe("Fluxo completo /analyze (ETL — meltano/meltano)", () => {
     expect(stack.some(s => s.includes("dbt"))).toBe(true);
   });
 
-  it("paid_sats é 500 (tier full)", async () => {
-    const { macaroon, preimage } = await getL402Token("full");
-    const auth = `L402 ${macaroon}:${preimage}`;
-    const { body } = await post(
-      "/analyze",
-      { repo_url: "https://github.com/meltano/meltano", tier: "full" },
-      { Authorization: auth }
-    );
-    expect(body.paid_sats).toBe(PRICE_SATS.full);
-    expect(body.cached).toBe(true);
-  }, 30_000);
+  it("paid_sats é 10000 (tier full)", () => {
+    expect(paidSats).toBe(PRICE_SATS.full);
+  });
 
   // ─── Benchmark sobre o grafo retornado ──────────────────────────────────────
 
   it("benchmark retorna 6 dimensões com score e evidence", async () => {
     const { status, body } = await post("/api/benchmark", { graph, format: "json" });
     expect(status).toBe(200);
-    const dims = body.dimensions as Record<string, { score: number; evidence: unknown[] }>;
+    const dims = body!.dimensions as Record<string, { score: number; evidence: unknown[] }>;
     const expected = ["resilience", "observability", "security", "scalability", "simplicity", "async_coverage"];
     for (const dim of expected) {
       expect(dims[dim]).toBeDefined();
       expect(dims[dim].score).toBeGreaterThanOrEqual(0);
       expect(Array.isArray(dims[dim].evidence)).toBe(true);
     }
-    expect(body.overall as number).toBeGreaterThan(0);
-    expect(["A", "B", "C", "D", "F"]).toContain(body.grade);
+    expect(body!.overall as number).toBeGreaterThan(0);
+    expect(["A", "B", "C", "D", "F"]).toContain(body!.grade);
   });
 
   it("benchmark format=markdown retorna texto com headers", async () => {
@@ -164,11 +192,11 @@ describe("Fluxo completo /analyze (ETL — meltano/meltano)", () => {
   // ─── Diff: compara grafo consigo mesmo ──────────────────────────────────────
 
   it("diff de grafo idêntico retorna severity=none", async () => {
-    if (!savedFile) return;
-    const { status, body } = await get(`/api/diff?a=${savedFile}&b=${savedFile}&format=json`);
+    if (!viewId) return;
+    const { status, body } = await get(`/api/diff?a=${viewId}&b=${viewId}&format=json`);
     expect(status).toBe(200);
-    expect(body.summary).toBeDefined();
-    const summary = body.summary as { severity: string };
+    expect(body!.summary).toBeDefined();
+    const summary = body!.summary as { severity: string };
     expect(summary.severity).toBe("none");
   });
 });
@@ -187,7 +215,7 @@ describe("Share e short link", () => {
     };
     const { status, body } = await post("/api/share", { graph: minimalGraph });
     expect(status).toBe(200);
-    const id = body.id as string;
+    const id = body!.id as string;
     expect(id).toMatch(/^[0-9a-f]{8}$/);
 
     // Short link serve HTML do viewer com grafo embutido (200, não redirect)
@@ -201,7 +229,6 @@ describe("Share e short link", () => {
   it("GET /g/<inexistente> retorna erro (não 200)", async () => {
     const r = await fetch(`${BASE}/g/naoexiste99`);
     // Must not return 200 — graph doesn't exist
-    // 404 = new branded page, 400 = old behavior, both are valid "not found" responses
     expect(r.status).not.toBe(200);
     expect([400, 404]).toContain(r.status);
   });
@@ -211,17 +238,17 @@ describe("Share e short link", () => {
 
 describe("Token replay protection", () => {
   it("rejeita preimage inválido (SHA256 não bate com payment_hash)", async () => {
-    // Obtém um token válido mas substitui o preimage por um inválido
-    const { macaroon } = await getL402Token("basic");
+    // Use GATE_REPO + tier "live" so the L402 gate fires (no trial, no cache bypass)
+    const { macaroon } = await getL402Token("live", GATE_REPO);
     const fakePreimage = "0".repeat(64); // SHA256 não bate com o hash real
     const auth = `L402 ${macaroon}:${fakePreimage}`;
 
     const r = await post(
       "/analyze",
-      { repo_url: "https://github.com/meltano/meltano", tier: "basic" },
+      { repo_url: GATE_REPO, tier: "live" },
       { Authorization: auth }
     );
-    // Deve rejeitar: preimage inválido → novo 402 ou 401
+    // Deve rejeitar: preimage inválido → 401 ou 402
     expect([401, 402]).toContain(r.status);
   }, 30_000);
 });

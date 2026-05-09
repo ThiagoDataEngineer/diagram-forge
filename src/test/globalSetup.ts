@@ -1,8 +1,16 @@
 import { spawn, execSync, ChildProcess } from "child_process";
+import { rmSync } from "fs";
+import { resolve } from "path";
 
 let serverProcess: ChildProcess | null = null;
 
 export async function setup(): Promise<void> {
+  // Clear the graph cache so P-3 cache-bypass middleware doesn't intercept L402
+  // gate tests with results from previous runs.
+  try {
+    rmSync(resolve(process.cwd(), "data/cache"), { recursive: true, force: true });
+  } catch { /* non-fatal */ }
+
   // Kill any stale server on port 3000 from a previous run before starting fresh.
   // On Windows, port 3000 may still be bound if teardown was skipped.
   try {
@@ -18,7 +26,7 @@ export async function setup(): Promise<void> {
   // what dotenv loads from .env (where LIGHTNING_ADDRESS may be set for production).
   // Using a non-empty truthy string avoids the Windows OS behavior of dropping
   // empty-string env vars before they reach the child process.
-  const env = { ...process.env, TEST_MOCK_LIGHTNING: "true" };
+  const env = { ...process.env, TEST_MOCK_LIGHTNING: "true", ENABLE_DEV_PAY: "1" };
 
   serverProcess = spawn("npx", ["tsx", "src/server.ts"], {
     cwd: process.cwd(),

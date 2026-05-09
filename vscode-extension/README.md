@@ -2,41 +2,33 @@
 
 > Open any GitHub repo in VS Code → Claude analyzes the codebase → interactive architecture diagram in your browser. Pay per use via Lightning Network. First analysis free.
 
-<table>
-<tr>
-<td align="center" width="50%">
-<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/01-idle.png" alt="Idle — click Analyze to start" width="220"/>
-<br/><sub><b>1. Open the panel</b></sub>
-</td>
-<td align="center" width="50%">
-<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/02-confirming.png" alt="Choose tier and optional promo code" width="220"/>
-<br/><sub><b>2. Pick a tier</b></sub>
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/03-analyzing.png" alt="Claude analyzes your codebase" width="220"/>
-<br/><sub><b>3. Claude explores your code</b></sub>
-</td>
-<td align="center" width="50%">
-<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/04-done.png" alt="Diagram ready — open in browser" width="220"/>
-<br/><sub><b>4. Diagram ready</b></sub>
-</td>
-</tr>
-</table>
+---
+
+### The extension — 4 steps, no config
+
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/docs/demo-extension-journey.gif"
+    alt="Diagram Forge VS Code extension — idle, tier selection, analysis, result"
+    width="320"
+  />
+</p>
+
+<p align="center"><sub>Idle → pick a tier → Claude analyzes → diagram ready</sub></p>
 
 ---
 
-## What it does
+### The result — an interactive living diagram
 
-Diagram Forge analyzes any GitHub repository with Claude AI and generates an **interactive, animated architecture diagram** showing:
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/docs/demo-viewer.gif"
+    alt="Diagram Forge interactive viewer — nodes, edges, particle flows, minimap"
+    width="720"
+  />
+</p>
 
-- Every service, database, queue, and API detected
-- Connections between components with protocol labels (HTTP, SQL, gRPC, WebSocket…)
-- Official logos for 80+ technologies (React, PostgreSQL, Redis, Kafka…)
-- Animated particle flows colored by protocol type
-
-The diagram opens in your browser with pan/zoom, node inspection, minimap, and SVG/PNG export.
+<p align="center"><sub>Pan · zoom · click any node · export SVG/PNG · share link</sub></p>
 
 ---
 

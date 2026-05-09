@@ -2,7 +2,28 @@
 
 > Open any GitHub repo in VS Code → Claude analyzes the codebase → interactive architecture diagram in your browser. Pay per use via Lightning Network. First analysis free.
 
-![Diagram Forge Extension Demo](https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/demo-extension.gif)
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/01-idle.png" alt="Idle — click Analyze to start" width="220"/>
+<br/><sub><b>1. Open the panel</b></sub>
+</td>
+<td align="center" width="50%">
+<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/02-confirming.png" alt="Choose tier and optional promo code" width="220"/>
+<br/><sub><b>2. Pick a tier</b></sub>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/03-analyzing.png" alt="Claude analyzes your codebase" width="220"/>
+<br/><sub><b>3. Claude explores your code</b></sub>
+</td>
+<td align="center" width="50%">
+<img src="https://raw.githubusercontent.com/ThiagoDataEngineer/diagram-forge/main/vscode-extension/media/04-done.png" alt="Diagram ready — open in browser" width="220"/>
+<br/><sub><b>4. Diagram ready</b></sub>
+</td>
+</tr>
+</table>
 
 ---
 
@@ -93,15 +114,15 @@ TypeScript · JavaScript · Python · Java · Go · Rust · Ruby · Scala · Jup
 
 ## Troubleshooting
 
-**Analysis takes 30–60 seconds to start** — The server runs on a free Render instance and may be sleeping. The progress bar will begin moving once it wakes up. A 3-minute timeout is in place; if it fires, try again immediately.
+**Analysis takes 30–60 seconds to start** — The server may be sleeping (free tier cold start). The progress bar begins moving once it wakes. A 3-minute timeout is in place; if it fires, try again immediately.
 
-**"Access blocked" or "Forbidden" error** — Your corporate network or proxy is blocking the analysis server. Try on a personal network or mobile hotspot. This is a network-level block and cannot be bypassed from within the extension.
+**"Access blocked" or "Forbidden" error** — Your corporate network or proxy is blocking the analysis server. Try on a personal network or mobile hotspot.
 
 **"Free daily limit reached"** — One free analysis per IP per day. Use a Lightning payment to continue, or wait until midnight UTC.
 
-**"Promo code is invalid or expired"** — Check the code spelling. Leave the field blank to use the standard free trial instead.
+**"Promo code is invalid or expired"** — Check spelling. Leave the field blank to use the standard free trial instead.
 
-**Repo not detected** — If your project doesn't have a GitHub remote, the extension will prompt you to paste a public GitHub URL manually. Private repos are not supported.
+**Repo not detected** — If your project has no GitHub remote, the extension prompts you to paste a public GitHub URL manually. Private repos are not supported.
 
 **Analysis times out on large repos** — Repos with >1,000 files can take 2–3 minutes on the Full tier. The progress bar advances every ~15 seconds as Claude explores the codebase.
 

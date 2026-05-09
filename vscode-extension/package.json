@@ -2,7 +2,7 @@
   "name": "diagram-forge",
   "displayName": "Diagram Forge",
   "description": "AI-generated architecture diagrams from your repo — powered by Claude, paid via Lightning ⚡",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "ShinyDapps",
   "icon": "icon.png",
   "repository": { "type": "git", "url": "https://github.com/shinydapps-creator/diagram-forge" },

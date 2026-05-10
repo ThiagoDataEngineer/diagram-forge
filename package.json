@@ -17,6 +17,7 @@
     "test:smoke": "vitest run src/test/smoke.test.ts",
     "test:e2e": "vitest run src/test/e2e.test.ts",
     "test:blink": "vitest run src/test/integration/blink.test.ts",
+    "test:ui": "vitest run src/test/ui.test.ts",
     "test:watch": "vitest"
   },
   "keywords": [

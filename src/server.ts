@@ -65,6 +65,8 @@ app.use(pinoHttp({
 
 // Serve vendored JS (dagre layout library — served locally to avoid CDN blocking)
 app.use(express.static(path.resolve(process.cwd(), "public"), { maxAge: "1d" }));
+// Serve demo GIFs and docs assets for the landing page
+app.use("/docs", express.static(path.resolve(process.cwd(), "docs"), { maxAge: "1h" }));
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 // Fix 5: add baseline security headers on every response

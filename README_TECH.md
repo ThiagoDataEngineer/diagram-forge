@@ -137,7 +137,7 @@ Client                          Server                    Lightning Node
   │                               │                             │
   │  POST /analyze {repo_url}     │                             │
   │ ──────────────────────────►  │                             │
-  │                               │  createInvoice(500 sats)   │
+  │                               │  createInvoice(10,000 sats) │
   │                               │ ──────────────────────────► │
   │                               │ ◄────────────────────────── │
   │  402 + invoice + macaroon     │   payment_hash + bolt11     │
@@ -187,7 +187,7 @@ return hash === payment_hash;
   "status": "ok",
   "service": "diagram-forge",
   "version": "0.1.0",
-  "tiers": { "basic": 100, "full": 500, "live": 1000 },
+  "tiers": { "basic": 2000, "full": 10000, "live": 25000 },
   "lightning_backend": "lnbits" | "mock"
 }
 ```
@@ -212,7 +212,7 @@ Requires L402 payment.
   "ok": true,
   "tier": "full",
   "graph": { /* ArchitectureGraph */ },
-  "paid_sats": 500,
+  "paid_sats": 10000,
   "cached": false
 }
 ```
@@ -223,7 +223,7 @@ Requires L402 payment.
   "error": "payment_required",
   "invoice": "lnbc500n1...",
   "payment_hash": "abc123...",
-  "amount_sats": 500,
+  "amount_sats": 10000,
   "expires_at": 1700000600
 }
 ```
@@ -655,9 +655,9 @@ Smoke tests cover: health, static pages, graph/diff/benchmark APIs, analyze-imag
 
 | Tier | Revenue | Claude cost | Net |
 |------|---------|-------------|-----|
-| Lightning basic (100 sats) | ~$0.10 | $0.02 | **$0.08** |
-| Lightning full (500 sats) | ~$0.50 | $0.03 | **$0.47** |
-| Lightning live (1000 sats) | ~$1.00 | $0.03 | **$0.97** |
+| Lightning basic (2,000 sats) | ~$2.00 | $0.02 | **$1.98** |
+| Lightning full (10,000 sats) | ~$10.00 | $0.03 | **$9.97** |
+| Lightning live (25,000 sats) | ~$25.00 | $0.03 | **$24.97** |
 | Stripe full ($15) | $14.27* | $0.03 | **$14.24** |
 | Stripe live ($39) | $37.56* | $0.03 | **$37.53** |
 

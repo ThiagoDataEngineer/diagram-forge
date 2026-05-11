@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/powered_by-Claude_AI-A855F7" alt="Claude AI"/>
   <img src="https://img.shields.io/badge/payments-Lightning_L402-F59E0B" alt="Lightning L402"/>
   <img src="https://img.shields.io/badge/polyglot-15%2B_stacks-22C55E" alt="Polyglot"/>
-  <img src="https://img.shields.io/badge/tests-72_passing-22C55E" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-0_1_5_passing-22C55E" alt="Tests"/>
 </p>
 
 ---
@@ -80,9 +80,9 @@ No account. No monthly subscription. Pay per analysis with a Lightning wallet.
 
 | Tier | Price | What you get |
 |------|-------|-------------|
-| **Basic** | 2,000 sats (~$2) | Quick scan — up to 10 key files, main services detected. **First analysis per IP is free.** |
-| **Full** | 10,000 sats (~$10) | Complete repo analysis — all services, connections, monorepos, notebooks, benchmark, diff, share link |
-| **Live** | 25,000 sats (~$25) | Full analysis + animated SVG particle flows, minimap, built-in screen recorder |
+| **Basic** | 2,000 sats (~$2.00) | Quick scan — up to 10 key files, main services detected. **First analysis per IP is free.** |
+| **Full** | 10,000 sats (~$10.00) | Complete repo analysis — all services, connections, monorepos, notebooks, benchmark, diff, share link |
+| **Live** | 25,000 sats (~$25.00) | Full analysis + animated SVG particle flows, minimap, built-in screen recorder |
 
 Payment via **Lightning Network** (L402 protocol). Any wallet: Alby, Phoenix, Wallet of Satoshi, Muun.
 

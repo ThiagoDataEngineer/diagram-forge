@@ -142,7 +142,7 @@ function renderNode(node: LayoutNode): string {
   const badgeW = Math.min(node.type.replace("_", " ").length * 7 + 12, 80);
 
   return `
-  <g class="node-box" data-id="${node.id}" data-type="${node.type}">
+  <g class="node-box" data-id="${escapeXml(node.id)}" data-type="${escapeXml(node.type)}">
     <!-- Shadow rect (offset) -->
     <rect x="${x + 2}" y="${y + 3}" width="${w}" height="${h}"
           rx="10" fill="rgba(0,0,0,0.06)" />
@@ -162,7 +162,7 @@ function renderNode(node: LayoutNode): string {
           rx="4" fill="${theme.badge}" opacity="0.15" />
     <text class="node-type-badge" x="${x + 10 + badgeW / 2}" y="${y + 26}"
           fill="${theme.badge}" text-anchor="middle">
-      ${node.type.replace("_", " ")}
+      ${escapeXml(node.type.replace("_", " "))}
     </text>
 
     <!-- Logo -->
@@ -171,13 +171,13 @@ function renderNode(node: LayoutNode): string {
     <!-- Label -->
     <text class="node-label" x="${x + w / 2}" y="${y + 52}"
           fill="${theme.text}" text-anchor="middle">
-      ${truncate(node.label, 18)}
+      ${escapeXml(truncate(node.label, 18))}
     </text>
 
     <!-- Tech -->
     <text class="node-tech" x="${x + w / 2}" y="${y + 68}"
           fill="${theme.text}" text-anchor="middle">
-      ${truncate(node.technology, 22)}
+      ${escapeXml(truncate(node.technology, 22))}
     </text>
   </g>`;
 }
@@ -203,7 +203,7 @@ function renderEdge(edge: LayoutEdge): string {
     ? `<text class="edge-label" x="${edge.labelPoint.x}" y="${edge.labelPoint.y}"
           fill="${color}" text-anchor="middle"
           style="background:white; paint-order:stroke; stroke:white; stroke-width:3px;">
-        ${edge.label}
+        ${escapeXml(edge.label)}
       </text>`
     : "";
 
@@ -215,7 +215,7 @@ function renderEdge(edge: LayoutEdge): string {
     </text>`;
 
   return `
-  <g class="edge-group" data-from="${edge.from}" data-to="${edge.to}" data-proto="${edge.protocol}">
+  <g class="edge-group" data-from="${escapeXml(edge.from)}" data-to="${escapeXml(edge.to)}" data-proto="${escapeXml(edge.protocol)}">
     <!-- Background glow -->
     <path class="edge-path-bg" d="${edge.path}" stroke="${color}" />
 

@@ -29,6 +29,7 @@ import { diffGraphs, diffToMarkdown } from "./analyzer/diff.js";
 import { benchmarkGraph, benchmarkToMarkdown } from "./analyzer/benchmark.js";
 import type { ArchitectureGraph } from "./analyzer/agent.js";
 import { hasTrial, setTrial, getIdem, setIdemRunning, setIdemDone, deleteIdem, startStoreCleanup } from "./db/stores.js";
+import rateLimit from "express-rate-limit";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,25 @@ app.use((_req, res, next) => {
   }
   next();
 });
+
+// ─── 3.2: Rate limiting (in-memory, resets on restart) ───────────────────────
+const perMinuteLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "rate_limited", message: "Too many requests. Please slow down." },
+});
+const perDayLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "rate_limited", message: "Daily limit reached. Try again tomorrow." },
+});
+app.use("/analyze", perMinuteLimiter, perDayLimiter);
+app.use("/diagram", perMinuteLimiter);
+app.use("/api/", perMinuteLimiter);
 
 // ─── Request type with L402 attached ─────────────────────────────────────────
 
@@ -460,14 +480,14 @@ app.post(
       track("analyze_error", { tier, ip: req.ip, repoUrl: repo_url });
       if (idemStoreKey) await deleteIdem(idemStoreKey); // allow retry on error
       // If SSE headers already sent, send error as SSE event; otherwise fall back to JSON
+      const clientMsg = err instanceof Error && err.message.startsWith("REPO_")
+        ? err.message
+        : "Analysis failed. Please try again or contact support.";
       if (res.headersSent) {
-        try { res.write(`data: ${JSON.stringify({ type: "error", message: err instanceof Error ? err.message : String(err) })}\n\n`); } catch { /* ignore */ }
+        try { res.write(`data: ${JSON.stringify({ type: "error", message: clientMsg })}\n\n`); } catch { /* ignore */ }
         res.end();
       } else {
-        res.status(500).json({
-          error: "analysis_failed",
-          message: err instanceof Error ? err.message : String(err),
-        });
+        res.status(500).json({ error: "analysis_failed", message: clientMsg });
       }
     } finally {
       cloneCleanup?.();
@@ -503,10 +523,8 @@ app.post(
       res.setHeader("Content-Disposition", 'inline; filename="diagram.svg"');
       res.send(svg);
     } catch (err) {
-      res.status(500).json({
-        error: "render_failed",
-        message: err instanceof Error ? err.message : String(err),
-      });
+      log.error({ err }, "render failed");
+      res.status(500).json({ error: "render_failed", message: "Diagram render failed." });
     }
   }
 );
@@ -699,8 +717,9 @@ app.get("/view", (req, res) => {
   }
 
   // Inject graph data as JS variable before closing </script>
+  const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   const injection = graph
-    ? `\n  window.__GRAPH_DATA__ = ${JSON.stringify(graph)};\n`
+    ? `\n  window.__GRAPH_DATA__ = ${safeJson(graph)};\n`
     : `\n  window.__GRAPH_DATA__ = null;\n`;
 
   html = html.replace("const GRAPH_DATA = window.__GRAPH_DATA__ || null;",
@@ -738,8 +757,8 @@ app.get("/api/diff", (req, res) => {
   const graphA = loadGraph(fileA);
   const graphB = loadGraph(fileB);
 
-  if (!graphA) { res.status(404).json({ error: `Graph not found: ${fileA}` }); return; }
-  if (!graphB) { res.status(404).json({ error: `Graph not found: ${fileB}` }); return; }
+  if (!graphA) { res.status(404).json({ error: "graph_not_found", param: "a" }); return; }
+  if (!graphB) { res.status(404).json({ error: "graph_not_found", param: "b" }); return; }
 
   const diff = diffGraphs(graphA, graphB);
 
@@ -845,7 +864,8 @@ app.get("/api/graph", (req, res) => {
     const graph = JSON.parse(fs.readFileSync(absPath, "utf-8"));
     res.json(graph);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    log.error({ err }, "graph read failed");
+    res.status(500).json({ error: "graph_read_failed" });
   }
 });
 

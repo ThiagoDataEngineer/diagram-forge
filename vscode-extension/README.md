@@ -50,7 +50,7 @@ First analysis free. Pay per use with Lightning — no account, no subscription.
 |------|-------|-----------------|
 | **Free** | $0 | One analysis per IP per day — no wallet, no promo code needed |
 | **Basic** | 2,000 sats (~$2) | 8 iterations — top files, main services, key connections |
-| **Full** — 10.000 sats (~full0.00) — complete analysis (full) repo, monorepos, all protocols |
+| **Full** | 10,000 sats (~$10) | Complete analysis — all services, connections, monorepos, all protocols |
 | **Live** | 25,000 sats (~$25) | Deep agentic exploration — maximum breadth and confidence |
 
 Pay once. The diagram link (`/g/:id`) is permanent — share it forever.

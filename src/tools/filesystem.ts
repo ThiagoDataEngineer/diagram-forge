@@ -260,24 +260,32 @@ export function executeListDirectory(
   return lines.length > 0 ? lines.join("\n") : "Empty directory.";
 }
 
-// Fix 3: resolves symlinks and verifies the real path stays within projectRoot
+// Resolves ALL symlinks in the path (not just the final component) and verifies
+// the real path stays within projectRoot. Handles intermediate symlinks too.
 function assertWithinRoot(absPath: string, projectRoot: string): string | null {
-  const root = path.resolve(projectRoot);
-  // Check nominal path first
-  if (!absPath.startsWith(root + path.sep) && absPath !== root) return "Error: path traversal not allowed.";
-  // Resolve symlinks and re-check
+  let rootReal: string;
   try {
-    const lstat = fs.lstatSync(absPath);
-    if (lstat.isSymbolicLink()) {
-      const real = fs.realpathSync(absPath);
-      if (!real.startsWith(root + path.sep) && real !== root) {
-        return "Error: symlink escapes project root — skipped for security.";
-      }
-    }
+    rootReal = fs.realpathSync.native(projectRoot);
   } catch {
-    return "Error: cannot stat path.";
+    rootReal = path.resolve(projectRoot);
   }
-  return null; // null = OK
+  // Check nominal path first (fast path for non-symlink cases)
+  const nominal = path.resolve(absPath);
+  if (!nominal.startsWith(rootReal + path.sep) && nominal !== rootReal) {
+    return "Error: path traversal not allowed.";
+  }
+  // Fully resolve all symlinks in the path (catches intermediate symlinks)
+  try {
+    const real = fs.realpathSync.native(absPath);
+    if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
+      return "Error: symlink escapes project root — skipped for security.";
+    }
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null; // file doesn't exist yet — nominal check passed above
+    return "Error: cannot resolve path.";
+  }
+  return null; // OK
 }
 
 export function executeReadFile(
